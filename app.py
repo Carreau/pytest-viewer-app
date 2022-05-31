@@ -1,5 +1,5 @@
 import json
-from flask import Flask, render_template, send_from_directory, send_file
+from quart import render_template, send_from_directory, send_file
 import logging
 from os import environ
 from base64 import b64decode
@@ -20,7 +20,9 @@ import requests_cache
 session = requests_cache.CachedSession("../erase_cache")
 
 
-app = Flask(__name__)
+from quart_trio import QuartTrio
+
+app = QuartTrio(__name__)
 
 log = logging.getLogger(__name__)
 
@@ -62,7 +64,7 @@ h2 = {
 
 
 @app.route("/gh/<org>/<repo>")
-def other(org, repo):
+async def other(org, repo):
     all_data = session.get(
         f"https://api.github.com/repos/{org}/{repo}/pulls", headers=h2
     ).json()
@@ -70,23 +72,23 @@ def other(org, repo):
 
 
 @app.route("/gh/<org>/<repo>/pull/<number>")
-def pull(org, repo, number):
+async def pull(org, repo, number):
     log.warning("Normal handler PR")
     print("P Normal handler PR")
     assert org.isalnum()
     assert repo.isalnum()
     assert number.isnumeric()
-    return render_template("index.html", org=org, repo=repo, number=number)
+    return await render_template("index.html", org=org, repo=repo, number=number)
 
 
 @app.route("/index.js")
-def index_js():
+async def index_js():
     print("IJS")
-    return send_file("./templates/index.js")
+    return await send_file("./templates/index.js")
 
 
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
-def api_pull(org, repo, number):
+async def api_pull(org, repo, number):
     log.warning("API Pull")
     assert org.isalnum()
     assert repo.isalnum()
@@ -152,3 +154,6 @@ def api_pull(org, repo, number):
     rz = json.dumps(data)
     log.warning("sending... %s Mb", len(rz) / 1024 / 1024)
     return rz
+
+if __name__ == '__main__':
+    app.run()
