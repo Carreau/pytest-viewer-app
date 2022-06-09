@@ -56,7 +56,8 @@ access_token_url = (
 response = requests.post(access_token_url, data=b"", headers=headers)
 
 idata = response.json()
-idata["token"]
+print(idata)
+
 
 h2 = {
     "Authorization": f"token {idata['token']}",
@@ -126,8 +127,8 @@ async def api_pull(org, repo, number):
                 break
 
     acc = []
-    log.warning("Downloading Artifacts...")
-    async with httpx.AsyncClient() as client:
+    log.warning("Looking for Artifacts...")
+    async with httpx.AsyncClient(follow_redirects=True) as client:
         for i, art in enumerate(
             {d["artifacts_url"] for d in data if d["head_sha"] == head["sha"]}
         ):
@@ -135,23 +136,26 @@ async def api_pull(org, repo, number):
                 art,
                 headers=h2,
             )).json()
-            log.warning("Downloading Artifacts... %s", i)
+            log.warning(f"Found Artifacts... %s ({number})", i)
 
             for x in data["artifacts"]:
                 if "pytest" in x["name"]:
                     log.warning("Found pytest in name for %s", x["name"])
                     acc.append(x["archive_download_url"])
 
-    data = {}
-    for i, arch in enumerate(acc):
-        log.warning("rezip... %s", i)
-        zp = session.get(arch, headers=h2)
-        z = ZipFile(BytesIO(zp.content))
-        for fx in z.filelist:
-            xs = json.loads(z.read(fx))
-            ## keep only what's necessary
-            data[fx.filename] = {"tests": xs["tests"]}
-        log.warning("reziped... %s", i)
+        data = {}
+        for i, arch in enumerate(acc):
+            log.warning(f"Requesting Content... %s ({number})", i)
+            zp = await client.get(arch, headers=h2)
+            log.warning(f"Unzipping in memory... %s ({number})", i)
+            zp.raise_for_status()
+            z = ZipFile(BytesIO(zp.content))
+            for j, fx in enumerate(z.filelist):
+                log.warning(f"rezip... %s/%s ({number})", j, len(z.filelist))
+                xs = json.loads(z.read(fx))
+                ## keep only what's necessary
+                data[fx.filename] = {"tests": xs["tests"]}
+            log.warning("reziped... %s", i)
 
     log.warning("json serialise")
     rz = json.dumps(data)
