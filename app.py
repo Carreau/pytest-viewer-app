@@ -1,4 +1,5 @@
 import json
+import httpx
 from quart import render_template, send_from_directory, send_file
 import logging
 from os import environ
@@ -105,39 +106,41 @@ async def api_pull(org, repo, number):
     head["sha"]
 
     data = []
-    for i in range(50):
-        log.warning("Looking for runs artifacts %s", i)
+    async with httpx.AsyncClient() as client:
+        for i in range(50):
+            log.warning("Looking for runs artifacts %s", i)
 
-        d = session.get(
-            f"https://api.github.com/repos/{org}/{repo}/actions/runs",
-            params={
-                "per_pages": 100,
-                "page": i,
-                "event": "pull_request",
-                "branch": head["ref"],
-            },
-            headers=h2,
-        ).json()
-        data.extend(d["workflow_runs"])
-        if len(d["workflow_runs"]) == 0:
-            log.warning("No more run after page %s", i)
-            break
+            d = (await client.get(
+                f"https://api.github.com/repos/{org}/{repo}/actions/runs",
+                params={
+                    "per_pages": 100,
+                    "page": i,
+                    "event": "pull_request",
+                    "branch": head["ref"],
+                },
+                headers=h2,
+            )).json()
+            data.extend(d["workflow_runs"])
+            if len(d["workflow_runs"]) == 0:
+                log.warning("No more run after page %s", i)
+                break
 
     acc = []
     log.warning("Downloading Artifacts...")
-    for i, art in enumerate(
-        {d["artifacts_url"] for d in data if d["head_sha"] == head["sha"]}
-    ):
-        data = session.get(
-            art,
-            headers=h2,
-        ).json()
-        log.warning("Downloading Artifacts... %s", i)
+    async with httpx.AsyncClient() as client:
+        for i, art in enumerate(
+            {d["artifacts_url"] for d in data if d["head_sha"] == head["sha"]}
+        ):
+            data = (await client.get(
+                art,
+                headers=h2,
+            )).json()
+            log.warning("Downloading Artifacts... %s", i)
 
-        for x in data["artifacts"]:
-            if "pytest" in x["name"]:
-                log.warning("Found pytest in name for %s", x["name"])
-                acc.append(x["archive_download_url"])
+            for x in data["artifacts"]:
+                if "pytest" in x["name"]:
+                    log.warning("Found pytest in name for %s", x["name"])
+                    acc.append(x["archive_download_url"])
 
     data = {}
     for i, arch in enumerate(acc):
@@ -156,4 +159,10 @@ async def api_pull(org, repo, number):
     return rz
 
 if __name__ == '__main__':
-    app.run()
+    port = int(os.environ.get("PORT", 1234))
+    print("Seen config port ", port)
+    prod = os.environ.get("PROD", None)
+    if prod:
+        app.run(port=port, host="0.0.0.0")
+    else:
+        app.run(port=port)
