@@ -121,8 +121,10 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
     id="drop_zone"
     ondrop="dropHandler(event);"
     ondragover="dragOverHandler(event);"
-  >
-    <p><a href='https://github.com/{{org}}/{{repo}}/pull/{{number}}'>{{org}}/{{repo}}#{{number}}</a></p>
+    >
+    {% if org %}
+      <p><a href='https://github.com/{{org}}/{{repo}}/pull/{{number}}'>{{org}}/{{repo}}#{{number}}</a></p>
+    {% endif %}
     <form>
       <select name="A" id="sZ">
         <option value="name" selected>Report File</option>

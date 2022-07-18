@@ -19,13 +19,13 @@ function process(raw, name) {
   // process raw data from pytest-json-report, and flatten it a bit
   // for latter nesting.
   // name: will be the name of the uploaded file.
+  console.log("PROCESS", raw);
 
   var data = [];
 
   for (test of raw["tests"]) {
-    var xa = test["nodeid"].split("::");
-    file = xa[0];
-    group = xa[1];
+    const [file, ...rest] = test["nodeid"].split("::");
+    const group = rest.join("::");
     for (k of ["call", "setup", "teardown"]) {
       try {
         var item = {};
@@ -37,6 +37,7 @@ function process(raw, name) {
         item.name = name;
         data.push(item);
       } catch (e) {
+        console.log("Error 41");
         //console.log(
         //  "test",
         //  k,
@@ -47,6 +48,7 @@ function process(raw, name) {
       }
     }
   }
+  console.log(data);
   return data;
 }
 

@@ -49,6 +49,8 @@ headers = {"Authorization": f"Bearer {PAT}", "Accept": "application/vnd.github.v
 
 inst = session.get(f"https://api.github.com/app/installations", headers=headers).json()
 
+print(inst)
+
 installation_id = inst[0]["id"]
 access_token_url = (
     f"https://api.github.com/app/installations/{installation_id}/access_tokens"
@@ -71,6 +73,11 @@ async def other(org, repo):
         f"https://api.github.com/repos/{org}/{repo}/pulls", headers=h2
     ).json()
     return json.dumps([x["number"] for x in all_data])
+
+
+@app.route("/")
+async def index():
+    return await render_template("index.html", org=None, repo=None, number=None)
 
 
 @app.route("/gh/<org>/<repo>/pull/<number>")
