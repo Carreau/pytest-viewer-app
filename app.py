@@ -17,6 +17,8 @@ import requests
 from zipfile import ZipFile
 from io import StringIO, BytesIO
 import requests_cache
+from dateutil.parser import isoparse
+from datetime import datetime, timedelta
 
 session = requests_cache.CachedSession("../erase_cache")
 
@@ -55,6 +57,38 @@ installation_id = inst[0]["id"]
 access_token_url = (
     f"https://api.github.com/app/installations/{installation_id}/access_tokens"
 )
+
+
+class Auth:
+
+    def __init__(self, access_token_url, PAT):
+        self._access_token_url = access_token_url
+        self._PAT = PAT
+        self._idata = None
+        self._regen()
+
+    def _regen(self):
+        headers = {"Authorization": f"Bearer {self._PAT}", "Accept": "application/vnd.github.v3+json"}
+        response = requests.post(self._access_token_url, data=b"", headers=headers)
+        self._idata = response.json()
+        self._expires = isoparse(response['expires_at']) - timedelta(seconds=10)
+
+
+
+    @property
+    def header(self):
+        if datetime.now() < self._expires:
+            self._regen()
+        return {
+            "Authorization": f"token {self._idata['token']}",
+            "Accept": "application/vnd.github.v3+json",
+        }
+
+
+
+AUTH = Auth(access_token_url, headers)
+
+
 response = requests.post(access_token_url, data=b"", headers=headers)
 
 idata = response.json()
@@ -70,7 +104,7 @@ h2 = {
 @app.route("/gh/<org>/<repo>")
 async def other(org, repo):
     all_data = session.get(
-        f"https://api.github.com/repos/{org}/{repo}/pulls", headers=h2
+        f"https://api.github.com/repos/{org}/{repo}/pulls", headers=AUTH.header
     ).json()
     return json.dumps([x["number"] for x in all_data])
 
@@ -104,11 +138,11 @@ async def api_pull(org, repo, number):
     assert number.isnumeric()
 
     pr_data = requests.get(
-        f"https://api.github.com/repos/{org}/{repo}/pulls/{number}", headers=h2
+        f"https://api.github.com/repos/{org}/{repo}/pulls/{number}", headers=AUTH.header
     ).json()
     if "head" not in pr_data:
         log.warning("NO Head : %s", pr_data.keys())
-        log.warning("Wont work")
+        log.warning("Wont work", json.dumps(pr_data))
         return json.dumps(pr_data)
     head = pr_data["head"]
     head["sha"]
@@ -126,7 +160,7 @@ async def api_pull(org, repo, number):
                     "event": "pull_request",
                     "branch": head["ref"],
                 },
-                headers=h2,
+                headers=AUTH.header,
             )).json()
             data.extend(d["workflow_runs"])
             if len(d["workflow_runs"]) == 0:
@@ -141,7 +175,7 @@ async def api_pull(org, repo, number):
         ):
             data = (await client.get(
                 art,
-                headers=h2,
+                headers=AUTH.header,
             )).json()
             log.warning(f"Found Artifacts... %s ({number})", i)
 
@@ -153,7 +187,7 @@ async def api_pull(org, repo, number):
         data = {}
         for i, arch in enumerate(acc):
             log.warning(f"Requesting Content... %s ({number})", i)
-            zp = await client.get(arch, headers=h2)
+            zp = await client.get(arch, headers=AUTH.header)
             log.warning(f"Unzipping in memory... %s ({number})", i)
             zp.raise_for_status()
             z = ZipFile(BytesIO(zp.content))
