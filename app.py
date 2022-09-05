@@ -77,8 +77,9 @@ class Auth:
 
     @property
     def header(self):
-        if datetime.now(pytz.UTC) < self._expires:
-            print("Expired header, regenerate")
+        now = datetime.now(pytz.UTC)
+        if self._expires < now:
+            print("Expired header, regenerate, (expires, now)", self._expires, now)
             self._regen()
         return {
             "Authorization": f"token {self._idata['token']}",
