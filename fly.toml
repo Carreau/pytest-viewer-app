@@ -46,8 +46,11 @@ processes = []
   url_prefix = "/static/"
 
 [build]
-  builder = "paketobuildpacks/builder"
+  builder = "paketobuildpacks/builder:base"
   buildpacks = ["gcr.io/paketo-buildpacks/python"]
+  [[build.env]]
+    name = "BP_CPYTHON_VERSION"
+    value = "3.10.*"
 
 [deploy]
   strategy = "immediate"

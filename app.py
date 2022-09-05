@@ -1,4 +1,5 @@
 import json
+import pytz
 import httpx
 from quart import render_template, send_from_directory, send_file
 import logging
@@ -71,13 +72,13 @@ class Auth:
         headers = {"Authorization": f"Bearer {self._PAT}", "Accept": "application/vnd.github.v3+json"}
         response = requests.post(self._access_token_url, data=b"", headers=headers)
         self._idata = response.json()
-        self._expires = isoparse(response['expires_at']) - timedelta(seconds=10)
-
-
+        print("expires_at idata:", repr(self._idata))
+        self._expires = isoparse(self._idata["expires_at"]) - timedelta(seconds=10)
 
     @property
     def header(self):
-        if datetime.now() < self._expires:
+        if datetime.now(pytz.UTC) < self._expires:
+            print("Expired header, regenerate")
             self._regen()
         return {
             "Authorization": f"token {self._idata['token']}",
@@ -86,7 +87,7 @@ class Auth:
 
 
 
-AUTH = Auth(access_token_url, headers)
+AUTH = Auth(access_token_url, bearer_token)
 
 
 response = requests.post(access_token_url, data=b"", headers=headers)
