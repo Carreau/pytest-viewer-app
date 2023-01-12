@@ -38,16 +38,22 @@ print(APP_ID, sha512(pem_data).hexdigest())
 instance = jwt.JWT()
 pem_file = jwt.jwk_from_pem(pem_data)
 
-payload = {
-    "iat": int(time.time()),
-    "exp": int(time.time()) + (10 * 60),
-    "iss": APP_ID,
-}
-bearer_token = instance.encode(payload, pem_file, alg="RS256")
+
+MINUTE = 60
+VALIDITY = 1 * MINUTE
+
+
+def bt():
+    payload = {
+        "iat": int(time.time()),
+        "exp": int(time.time()) + VALIDITY,
+        "iss": APP_ID,
+    }
+    return instance.encode(payload, pem_file, alg="RS256")
 
 
 
-PAT = bearer_token
+PAT = bt()
 headers = {"Authorization": f"Bearer {PAT}", "Accept": "application/vnd.github.v3+json"}
 
 inst = session.get(f"https://api.github.com/app/installations", headers=headers).json()
@@ -62,17 +68,20 @@ access_token_url = (
 
 class Auth:
 
-    def __init__(self, access_token_url, PAT):
+    def __init__(self, access_token_url, bt):
         self._access_token_url = access_token_url
-        self._PAT = PAT
+        self._bt = bt
         self._idata = None
         self._regen()
 
     def _regen(self):
-        headers = {"Authorization": f"Bearer {self._PAT}", "Accept": "application/vnd.github.v3+json"}
+        headers = {
+            "Authorization": f"Bearer {self._bt()}",
+            "Accept": "application/vnd.github.v3+json",
+        }
         response = requests.post(self._access_token_url, data=b"", headers=headers)
         self._idata = response.json()
-        print("expires_at idata:", repr(self._idata))
+        print("new expires_at idata:", repr(self._idata))
         self._expires = isoparse(self._idata["expires_at"]) - timedelta(seconds=10)
 
     @property
@@ -81,6 +90,7 @@ class Auth:
         if self._expires < now:
             print("Expired header, regenerate, (expires, now)", self._expires, now)
             self._regen()
+        print(f"tk: token {self._idata['token']}")
         return {
             "Authorization": f"token {self._idata['token']}",
             "Accept": "application/vnd.github.v3+json",
@@ -88,7 +98,7 @@ class Auth:
 
 
 
-AUTH = Auth(access_token_url, bearer_token)
+AUTH = Auth(access_token_url, bt)
 
 
 response = requests.post(access_token_url, data=b"", headers=headers)
@@ -132,19 +142,34 @@ async def index_js():
     return await send_file("./templates/index.js")
 
 
+def clean_item(d):
+    del d['created']
+    del d['duration']
+    del d['exitcode']
+    del d['environment']
+    del d['root']
+    del d['collectors']
+    del d['summary']
+    del d['warnings']
+    for t in d['tests']:
+        del t['keywords']
+        del t['lineno']
+        del t['outcome']
+
+
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
 async def api_pull(org, repo, number):
     log.warning("API Pull")
     assert org.isalnum()
     assert repo.isalnum()
     assert number.isnumeric()
-
+    url = f"https://api.github.com/repos/{org}/{repo}/pulls/{number}"
     pr_data = requests.get(
-        f"https://api.github.com/repos/{org}/{repo}/pulls/{number}", headers=AUTH.header
+        url, headers=AUTH.header
     ).json()
     if "head" not in pr_data:
         log.warning("NO Head : %s", pr_data.keys())
-        log.warning("Wont work", json.dumps(pr_data))
+        log.warning(f"URL: {url} ont work", json.dumps(pr_data))
         return json.dumps(pr_data)
     head = pr_data["head"]
     head["sha"]
@@ -179,12 +204,15 @@ async def api_pull(org, repo, number):
                 art,
                 headers=AUTH.header,
             )).json()
-            log.warning(f"Found Artifacts... %s ({number})", i)
+            log.warning("Found Artifacts %s on page %s (pr %s)", len(data["artifacts"]), i, number)
 
-            for x in data["artifacts"]:
-                if "pytest" in x["name"]:
-                    log.warning("Found pytest in name for %s", x["name"])
-                    acc.append(x["archive_download_url"])
+            for artifact in data["artifacts"]:
+                log.info('Artifact:', artifact['name'])
+                if "pytest" in artifact["name"]:
+                    log.warning("Found pytest in name for %s", artifact["name"])
+                    acc.append(artifact["archive_download_url"])
+
+        self.log('Found %s artifacts for PR %s with pytest in name', len(acc), number)
 
         data = {}
         for i, arch in enumerate(acc):
@@ -198,7 +226,10 @@ async def api_pull(org, repo, number):
                 xs = json.loads(z.read(fx))
                 ## keep only what's necessary
                 data[fx.filename] = {"tests": xs["tests"]}
-            log.warning("reziped... %s", i)
+                for t in data[fx.filename]['tests']:
+                    del t['keywords']
+                    del t['lineno']
+                    del t['outcome']
 
     log.warning("json serialise")
     rz = json.dumps(data)

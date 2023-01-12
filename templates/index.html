@@ -204,8 +204,10 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
         console.log('HERE')
         fetch('/api/gh/{{org}}/{{repo}}/pull/{{number}}')
             .then( function(resp){
-                     console.log('THERE')
-                     return resp.json()
+              console.log('THERE')
+              let res = resp.json()
+              console.log(res)
+              return res;
 }
          )
          .then( function(dx){
