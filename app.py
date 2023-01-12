@@ -212,7 +212,7 @@ async def api_pull(org, repo, number):
                     log.warning("Found pytest in name for %s", artifact["name"])
                     acc.append(artifact["archive_download_url"])
 
-        self.log('Found %s artifacts for PR %s with pytest in name', len(acc), number)
+        log.info('Found %s artifacts for PR %s with pytest in name', len(acc), number)
 
         data = {}
         for i, arch in enumerate(acc):
