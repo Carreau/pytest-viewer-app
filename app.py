@@ -185,6 +185,26 @@ async def collect_most_recent_workflow_runs(org: str, repo: str, ref: str) -> Li
     return data
 
 
+async def list_artifacts_urls_to_download(data, head_sha)
+    async with httpx.AsyncClient(follow_redirects=True) as client:
+        for i, art in enumerate(
+            {d["artifacts_url"] for d in data if d["head_sha"] == head["sha"]}
+        ):
+            data = (await client.get(
+                art,
+                headers=AUTH.header,
+            )).json()
+            log.warning("Found Artifacts %s on page %s (pr %s)", len(data["artifacts"]), i, number)
+
+            for artifact in data["artifacts"]:
+                log.info('Artifact:', artifact['name'])
+                if "pytest" in artifact["name"]:
+                    log.warning("Found pytest in name for %s", artifact["name"])
+                    acc.append(artifact["archive_download_url"])
+
+        log.info('Found %s artifacts for PR %s with pytest in name', len(acc), number)
+
+
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
 async def api_pull(org, repo, number):
     log.warning("API Pull")
@@ -224,6 +244,7 @@ async def api_pull(org, repo, number):
 
         log.info('Found %s artifacts for PR %s with pytest in name', len(acc), number)
 
+    async with httpx.AsyncClient(follow_redirects=True) as client:
         data = {}
         for i, arch in enumerate(acc):
             log.warning(f"Requesting Content... %s ({number})", i)
