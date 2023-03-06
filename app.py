@@ -6,6 +6,8 @@ import logging
 from os import environ
 from base64 import b64decode
 from hashlib import sha512
+from collections import defaultdict
+from typing import List
 
 import jwt
 import os
@@ -157,6 +159,32 @@ def clean_item(d):
         del t['outcome']
 
 
+async def collect_most_recent_workflow_runs(org: str, repo: str, ref: str) -> List[str]:
+    data = []
+    async with httpx.AsyncClient() as client:
+        for i in range(50):
+            log.warning("Looking for runs artifacts %s", i)
+
+            d = (
+                await client.get(
+                    f"https://api.github.com/repos/{org}/{repo}/actions/runs",
+                    params={
+                        "per_pages": 100,
+                        "page": i,
+                        "event": "pull_request",
+                        "branch": ref,
+                    },
+                    headers=AUTH.header,
+                )
+            ).json()
+            data.extend(d["workflow_runs"])
+            if len(d["workflow_runs"]) == 0:
+                log.warning("No more run after page %s", i)
+                break
+
+    return data
+
+
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
 async def api_pull(org, repo, number):
     log.warning("API Pull")
@@ -174,25 +202,7 @@ async def api_pull(org, repo, number):
     head = pr_data["head"]
     head["sha"]
 
-    data = []
-    async with httpx.AsyncClient() as client:
-        for i in range(50):
-            log.warning("Looking for runs artifacts %s", i)
-
-            d = (await client.get(
-                f"https://api.github.com/repos/{org}/{repo}/actions/runs",
-                params={
-                    "per_pages": 100,
-                    "page": i,
-                    "event": "pull_request",
-                    "branch": head["ref"],
-                },
-                headers=AUTH.header,
-            )).json()
-            data.extend(d["workflow_runs"])
-            if len(d["workflow_runs"]) == 0:
-                log.warning("No more run after page %s", i)
-                break
+    data = await collect_most_recent_workflow_runs(org, repo, head["ref"])
 
     acc = []
     log.warning("Looking for Artifacts...")
