@@ -185,7 +185,7 @@ async def collect_most_recent_workflow_runs(org: str, repo: str, ref: str) -> Li
     return data
 
 
-async def list_artifacts_urls_to_download(data, head_sha)
+async def list_artifacts_urls_to_download(data, head_sha):
     async with httpx.AsyncClient(follow_redirects=True) as client:
         for i, art in enumerate(
             {d["artifacts_url"] for d in data if d["head_sha"] == head["sha"]}
