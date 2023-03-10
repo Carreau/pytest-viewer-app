@@ -1,10 +1,24 @@
 version: "3.9"
 
 services:
-  web:
+  viewer_app_server:
+    container_name: "viewer_app_server"
+    restart: always
     build: .
     env_file:
       - .env
       - .env.local
     ports:
       - "1234:1234"
+
+  viewer_app_db:
+    container_name: "viewer_app_db"
+    image: postgres:15.2
+    volumes:
+      - ./.postgres-data:/var/lib/postgresql/data
+    restart: always
+    env_file:
+      - .env
+      - .env.local
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
