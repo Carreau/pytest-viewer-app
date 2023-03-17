@@ -7,7 +7,6 @@ services:
     build: .
     env_file:
       - .env
-      - .env.local
     ports:
       - "1234:1234"
 
@@ -19,6 +18,5 @@ services:
     restart: always
     env_file:
       - .env
-      - .env.local
     ports:
       - "${POSTGRES_PORT:-5432}:5432"

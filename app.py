@@ -22,6 +22,9 @@ from io import StringIO, BytesIO
 import requests_cache
 from dateutil.parser import isoparse
 from datetime import datetime, timedelta
+from dotenv import load_dotenv
+
+load_dotenv()
 
 session = requests_cache.CachedSession("../erase_cache")
 

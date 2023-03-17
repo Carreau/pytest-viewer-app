@@ -1,4 +1,5 @@
+**/*.swp
 *.pem
-.env.local
+.env
 .postgres-data
 __pycache__
