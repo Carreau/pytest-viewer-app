@@ -120,6 +120,19 @@ let defaults = {
   title: ''
 };
 
+function name(d) {
+  return d.parent ?
+    name(d.parent) +
+          ' / ' +
+          d.key +
+          ' (' +
+          timeformat(d.value) +
+          ' - ' +
+          d3.format('.3r')(d.prct * 100) +
+          '%)' :
+    d.key + ' (' + timeformat(d.value) + ')';
+}
+
 function main(opts, data) {
   let root;
   var opts = $.extend(true, {}, defaults, opts);
@@ -231,12 +244,12 @@ function main(opts, data) {
         [d.outcome]
       ];
     }
-    acc = d.values ?
+    let acc = d.values ?
       d.values.reduce(
         function (previous, current, index, array) {
-          _t = flatten(current);
-          value = _t[0];
-          outcome = _t[1];
+          const _t = flatten(current);
+          const value = _t[0];
+          const outcome = _t[1];
           return [previous[0].concat(value), previous[1].concat(outcome)];
         },
         [
@@ -259,7 +272,7 @@ function main(opts, data) {
       return 'mixed';
     }, 'passed');
 
-    if (d.outcome == 'mixed') {
+    if (d.outcome === 'mixed') {
       console.log(acc[1].filter(onlyUnique));
     }
     d._children = d.values ? d.values : d.value;
@@ -376,9 +389,9 @@ function main(opts, data) {
 
     g.selectAll('rect').style('fill', function (d) {
       //return "#e53935";
-      return d.outcome == 'passed' ?
+      return d.outcome === 'passed' ?
         '#00cc00' :
-        d.outcome == 'failed' ?
+        d.outcome === 'failed' ?
           '#cc0000' :
           '#FFA500';
       return color(1);
@@ -456,8 +469,8 @@ function main(opts, data) {
       });
   }
 
-  function rect(rect) {
-    rect
+  function rect(rct) {
+    rct
       .attr('x', function (d) {
         return x(d.x);
       })
@@ -472,30 +485,18 @@ function main(opts, data) {
       });
   }
 
-  function name(d) {
-    return d.parent ?
-      name(d.parent) +
-            ' / ' +
-            d.key +
-            ' (' +
-            timeformat(d.value) +
-            ' - ' +
-            d3.format('.3r')(d.prct * 100) +
-            '%)' :
-      d.key + ' (' + timeformat(d.value) + ')';
-  }
 }
 
-function init(err, res) {
-  res = JSON.parse(JSON.stringify(window.DX));
+function init(err, _res) {
+  let res = JSON.parse(JSON.stringify(window.DX));
 
-  res.map(function (res) {
-    let ind = res.group.indexOf('[');
-    if (ind != -1) {
-      res.param = res.group.slice(ind + 1, res.group.length - 1);
-      res.group = res.group.slice(0, ind);
+  res.map(function (rx) {
+    let ind = rx.group.indexOf('[');
+    if (ind !== -1) {
+      rx.param = rx.group.slice(ind + 1, rx.group.length - 1);
+      rx.group = rx.group.slice(0, ind);
     } else {
-      res.param = 'No-parameters';
+      rx.param = 'No-parameters';
     }
   });
 
@@ -503,7 +504,7 @@ function init(err, res) {
 
   for (const i of ['sZ', 'sA', 'sB', 'sC', 'sD']) {
     let vv = document.getElementById(i).value;
-    if (vv == 'rollup') {
+    if (vv === 'rollup') {
       continue;
     }
 
@@ -512,17 +513,17 @@ function init(err, res) {
     });
   }
   n = n.rollup(function (v) {
-    res = d3.sum(v, (x) => x.value);
-    red = v.reduce(function (previous, current) {
-      if (current.outcome == 'skipped') {
+    const res2 = d3.sum(v, (x) => x.value);
+    const red = v.reduce(function (previous, current) {
+      if (current.outcome === 'skipped') {
         return 'passed';
       }
-      return previous == current.outcome ? previous : 'mixed';
+      return previous === current.outcome ? previous : 'mixed';
     }, v[0].outcome);
     return [{
       key: '',
       outcome: red,
-      value: res
+      value: res2
     } ];
   });
   let data = n.entries(res);
