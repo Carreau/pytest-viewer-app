@@ -65,7 +65,7 @@ function process_reply(raw, name) {
       item.key = file;
       item.group = group;
       item.kind = k;
-      item.value = re[k];
+      item.value = re[k]*1000;
       item.outcome = 'passed';
       item.name = name;
       data.push(item);
