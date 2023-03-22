@@ -261,7 +261,7 @@ async def api_pull(org, repo, number):
                 xs = json.loads(z.read(fx))
                 xs_tests = xs["tests"]
                 ## keep only what's necessary
-                for t in xs_tests["tests"]:
+                for t in xs_tests:
                     del t["keywords"]
                     del t["lineno"]
                     del t["outcome"]
