@@ -1,4 +1,5 @@
 import json
+import sys
 import pytz
 import httpx
 from quart import render_template, send_from_directory, send_file
@@ -258,12 +259,14 @@ async def api_pull(org, repo, number):
             for j, fx in enumerate(z.filelist):
                 log.warning(f"rezip... %s/%s ({number})", j, len(z.filelist))
                 xs = json.loads(z.read(fx))
+                xs_tests = xs["tests"]
                 ## keep only what's necessary
-                data[fx.filename] = {"tests": xs["tests"]}
-                for t in data[fx.filename]['tests']:
-                    del t['keywords']
-                    del t['lineno']
-                    del t['outcome']
+                for t in xs_tests["tests"]:
+                    del t["keywords"]
+                    del t["lineno"]
+                    del t["outcome"]
+                data[fx.filename] = {"tests": xs_tests}
+                print("data size:", sys.getsizeof(data))
 
     log.warning("json serialise")
     rz = json.dumps(data)
