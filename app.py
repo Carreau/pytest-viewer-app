@@ -208,6 +208,9 @@ async def list_artifacts_urls_to_download(data, head_sha, number):
     return acc
 
 
+CACHE = {}
+
+
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
 async def api_pull(org, repo, number):
     log.warning("API Pull")
@@ -231,12 +234,19 @@ async def api_pull(org, repo, number):
 
     async with httpx.AsyncClient(follow_redirects=True) as client:
         data = {}
-        for i, arch in enumerate(acc):
+        for i, archive in enumerate(acc):
             log.warning(f"Requesting Content... %s ({number})", i)
-            zp = await client.get(arch, headers=AUTH.header)
-            log.warning(f"Unzipping in memory... %s ({number})", i)
-            zp.raise_for_status()
-            z = ZipFile(BytesIO(zp.content))
+            print("archive", archive)
+            if archive in CACHE:
+                print("CACHE HIT")
+                content = CACHE[archive]
+            else:
+                zp = await client.get(archive, headers=AUTH.header)
+                log.warning(f"Unzipping in memory... %s ({number})", i)
+                zp.raise_for_status()
+                content = zp.content
+                CACHE[archive] = content
+            z = ZipFile(BytesIO(content))
             for j, fx in enumerate(z.filelist):
                 import gc
 
@@ -247,17 +257,28 @@ async def api_pull(org, repo, number):
                 log.warning("z_read data size: %s", objsize.get_deep_size(z_read))
                 xs = json.loads(z_read)
                 del z_read
-                gc.collect()
                 log.warning("beofre data size: %s", objsize.get_deep_size(data))
                 xs_tests = xs["tests"]
+                comp_test = []
+
+                for item in xs_tests:
+                    if "outcome" in item and item["outcome"] == "skipped":
+                        continue
+                    if "call" in item:
+                        comp_test.append(
+                            (
+                                item["nodeid"],
+                                item["call"]["duration"],
+                                item["setup"]["duration"],
+                                item["teardown"]["duration"],
+                            )
+                        )
+                    else:
+                        print(item)
+
                 del xs
-                gc.collect()
                 ## keep only what's necessary
-                for t in xs_tests:
-                    del t["keywords"]
-                    del t["lineno"]
-                    del t["outcome"]
-                data[fx.filename] = {"tests": xs_tests}
+                data[fx.filename] = {"comp": comp_test}
                 log.warning("after data size: %s", objsize.get_deep_size(data))
 
     log.warning("json serialise")

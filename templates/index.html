@@ -212,10 +212,9 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
          )
          .then( function(dx){
                     window.DX = [];
-                    console.log('DD:',dx);
                     for (const property in dx) {
                         console.log(`${property}: ${dx[property]}`);
-                        window.DX = window.DX.concat(process(dx[property], property));
+                        window.DX = window.DX.concat(process_reply(dx[property], property));
                     }
                      console.info(window.dx);
                      window.init();

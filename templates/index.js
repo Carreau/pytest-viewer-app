@@ -14,7 +14,7 @@ function onlyUnique(value, index, self) {
   return self.indexOf(value) === index;
 }
 
-function process(raw, name) {
+function process_report(raw, name) {
   // process raw data from pytest-json-report, and flatten it a bit
   // for latter nesting.
   // name: will be the name of the uploaded file.
@@ -22,7 +22,8 @@ function process(raw, name) {
 
   let data = [];
 
-  for (test in raw.tests) {
+
+  for (test of raw.tests) {
     const [file, ...rest] = test.nodeid.split('::');
     const group = rest.join('::');
     for (k of ['call', 'setup', 'teardown']) {
@@ -41,6 +42,38 @@ function process(raw, name) {
     }
   }
   console.log(data);
+  return data;
+}
+
+
+function process_reply(raw, name) {
+  // similar to process_report, but the API may do some more treatment
+  // to make the json report smaller. 
+  console.log('PROCESS REPLY');
+
+  let data = [];
+  for (let i in raw.comp){
+    const [nodeid, call, setup, teardown] = raw.comp[i]
+    const [file, ...rest] = nodeid.split('::');
+    const group = rest.join('::');
+    const re = { call:call,
+           setup:setup,
+           teardown:teardown
+    }
+    for (k of ['call', 'setup', 'teardown']) {
+      let item = {};
+      item.key = file;
+      item.group = group;
+      item.kind = k;
+      item.value = re[k];
+      item.outcome = 'passed';
+      item.name = name;
+      data.push(item);
+    }
+
+  }
+  console.log('Treated ', raw.comp.length , 'items')
+
   return data;
 }
 
@@ -81,7 +114,7 @@ function dropHandler(ev) {
         fr.onloadend = function () {
           raw = JSON.parse(this.result);
 
-          window.DX = window.DX.concat(process(raw, name));
+          window.DX = window.DX.concat(process_report(raw, name));
           processed = processed + 1;
           if (processed == processing_count) {
             init();
@@ -268,13 +301,13 @@ function main(opts, data) {
       if (p == c) {
         return c;
       }
-      console.log('PC', p, c);
+      //console.log('PC', p, c);
       return 'mixed';
     }, 'passed');
 
-    if (d.outcome === 'mixed') {
-      console.log(acc[1].filter(onlyUnique));
-    }
+    //if (d.outcome === 'mixed') {
+      //console.log(acc[1].filter(onlyUnique));
+    //}
     d._children = d.values ? d.values : d.value;
     d._children.forEach((element) => {
       element.prct = element.value / total;
@@ -544,7 +577,8 @@ function init(err, _res) {
 //}
 window.onresize = init;
 window.init = init;
-window.process = process;
+window.process_report = process_report;
+window.process_reply = process_reply;
 document.getElementById('sZ').addEventListener('change', init);
 document.getElementById('sA').addEventListener('change', init);
 document.getElementById('sB').addEventListener('change', init);
