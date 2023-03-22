@@ -1,25 +1,21 @@
 import json
+import objsize
 import sys
 import pytz
 import httpx
-from quart import render_template, send_from_directory, send_file
+from quart import render_template, send_file
 import logging
 from os import environ
 from base64 import b64decode
 from hashlib import sha512
-from collections import defaultdict
 from typing import List
 
 import jwt
 import os
 import time
-from base64 import b64encode
-from pathlib import Path
-from base64 import b64encode
-from hashlib import sha512
 import requests
 from zipfile import ZipFile
-from io import StringIO, BytesIO
+from io import BytesIO
 import requests_cache
 from dateutil.parser import isoparse
 from datetime import datetime, timedelta
@@ -62,7 +58,7 @@ def bt():
 PAT = bt()
 headers = {"Authorization": f"Bearer {PAT}", "Accept": "application/vnd.github.v3+json"}
 
-inst = session.get(f"https://api.github.com/app/installations", headers=headers).json()
+inst = session.get("https://api.github.com/app/installations", headers=headers).json()
 
 print(inst)
 
@@ -189,10 +185,11 @@ async def collect_most_recent_workflow_runs(org: str, repo: str, ref: str) -> Li
     return data
 
 
-async def list_artifacts_urls_to_download(data, head_sha):
+async def list_artifacts_urls_to_download(data, head_sha, number):
+    acc = []
     async with httpx.AsyncClient(follow_redirects=True) as client:
         for i, art in enumerate(
-            {d["artifacts_url"] for d in data if d["head_sha"] == head["sha"]}
+            {d["artifacts_url"] for d in data if d["head_sha"] == head_sha}
         ):
             data = (await client.get(
                 art,
@@ -207,6 +204,8 @@ async def list_artifacts_urls_to_download(data, head_sha):
                     acc.append(artifact["archive_download_url"])
 
         log.info('Found %s artifacts for PR %s with pytest in name', len(acc), number)
+
+    return acc
 
 
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
@@ -224,29 +223,11 @@ async def api_pull(org, repo, number):
         log.warning(f"URL: {url} ont work", json.dumps(pr_data))
         return json.dumps(pr_data)
     head = pr_data["head"]
-    head["sha"]
 
     data = await collect_most_recent_workflow_runs(org, repo, head["ref"])
 
-    acc = []
     log.warning("Looking for Artifacts...")
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        for i, art in enumerate(
-            {d["artifacts_url"] for d in data if d["head_sha"] == head["sha"]}
-        ):
-            data = (await client.get(
-                art,
-                headers=AUTH.header,
-            )).json()
-            log.warning("Found Artifacts %s on page %s (pr %s)", len(data["artifacts"]), i, number)
-
-            for artifact in data["artifacts"]:
-                log.info('Artifact:', artifact['name'])
-                if "pytest" in artifact["name"]:
-                    log.warning("Found pytest in name for %s", artifact["name"])
-                    acc.append(artifact["archive_download_url"])
-
-        log.info('Found %s artifacts for PR %s with pytest in name', len(acc), number)
+    acc = await list_artifacts_urls_to_download(data, head["sha"], number)
 
     async with httpx.AsyncClient(follow_redirects=True) as client:
         data = {}
@@ -257,16 +238,27 @@ async def api_pull(org, repo, number):
             zp.raise_for_status()
             z = ZipFile(BytesIO(zp.content))
             for j, fx in enumerate(z.filelist):
-                log.warning(f"rezip... %s/%s ({number})", j, len(z.filelist))
-                xs = json.loads(z.read(fx))
+                import gc
+
+                gc.collect()
+
+                log.warning(f"rezip... %s/%s %s ({number})", j, len(z.filelist), fx)
+                z_read = z.read(fx)
+                log.warning("z_read data size: %s", objsize.get_deep_size(z_read))
+                xs = json.loads(z_read)
+                del z_read
+                gc.collect()
+                log.warning("beofre data size: %s", objsize.get_deep_size(data))
                 xs_tests = xs["tests"]
+                del xs
+                gc.collect()
                 ## keep only what's necessary
                 for t in xs_tests:
                     del t["keywords"]
                     del t["lineno"]
                     del t["outcome"]
                 data[fx.filename] = {"tests": xs_tests}
-                print("data size:", sys.getsizeof(data))
+                log.warning("after data size: %s", objsize.get_deep_size(data))
 
     log.warning("json serialise")
     rz = json.dumps(data)
