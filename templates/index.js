@@ -33,6 +33,7 @@ function process_report(raw, name) {
         item.group = group;
         item.kind = k;
         item.value = test[k].duration * 1000;
+        item.duration = test[k].duration * 1000;
         item.outcome = test[k].outcome;
         item.name = name;
         data.push(item);
@@ -66,6 +67,7 @@ function process_reply(raw, name) {
       item.group = group;
       item.kind = k;
       item.value = re[k]*1000;
+      item.duration = re[k]*1000;
       item.outcome = 'passed';
       item.name = name;
       data.push(item);
@@ -183,7 +185,6 @@ function main(opts, data) {
 
   let color = d3.scale.category10();
   //var color = d3.scale.linear(0, 100);
-
   let x = d3.scale.linear().domain([0, width]).range([0, width]);
 
   let y = d3.scale.linear().domain([0, height]).range([0, height]);
@@ -282,8 +283,9 @@ function main(opts, data) {
         function (previous, current, index, array) {
           const _t = flatten(current);
           const value = _t[0];
+          const duration = _t[0];
           const outcome = _t[1];
-          return [previous[0].concat(value), previous[1].concat(outcome)];
+          return [previous[0].concat(duration), previous[1].concat(outcome)];
         },
         [
           [],
@@ -296,7 +298,7 @@ function main(opts, data) {
       ];
     let total = acc[0].reduce((a, b) => a + b);
     d.value = total;
-    //d.value = Math.max(...acc[0]);
+    d.duration = total;
     d.outcome = acc[1].reduce(function (p, c) {
       if (p == c) {
         return c;
@@ -340,6 +342,11 @@ function main(opts, data) {
   }
 
   function display(d) {
+    const sum = d.values.reduce(function(acc, current ){return acc + current.duration;}, 0) / 10;
+    const colorscale = d3.scale.linear()
+      .domain([0,sum])
+      .range(["#10b5e3","#43bf37"]);
+
     grandparent
       .datum(d.parent)
       .on('click', transition)
@@ -377,7 +384,7 @@ function main(opts, data) {
                     //'Kind:'+d.kind+'\n'+
                     //'Name:'+d.name+"\n"+
                     '(' +
-                    timeformat(d.parent.value) +
+                    timeformat(d.parent.duration) +
                     ' - ' +
                     d3.format('.3r')(d.parent.prct * 100) +
                     '%' +
@@ -389,7 +396,7 @@ function main(opts, data) {
                     //'Kind:'+d.kind+'\n'+
                     //'Name:'+d.name+"\n"+
                     '(' +
-                    timeformat(d.value) +
+                    timeformat(d.duration) +
                     ' - ' +
                     d3.format('.3r')(d.prct * 100) +
                     '%' +
@@ -415,13 +422,14 @@ function main(opts, data) {
       .attr('dy', '1.0em')
       .text(function (d) {
         return (
-          timeformat(d.value) + ' - ' + d3.format('.3r')(d.prct * 100) + '%'
+          timeformat(d.duration) + ' - ' + d3.format('.3r')(d.prct * 100) + '%'
         );
       });
     t.call(text);
 
     g.selectAll('rect').style('fill', function (d) {
       //return "#e53935";
+      return colorscale(d.duration);
       return d.outcome === 'passed' ?
         '#00cc00' :
         d.outcome === 'failed' ?
@@ -546,7 +554,7 @@ function init(err, _res) {
     });
   }
   n = n.rollup(function (v) {
-    const res2 = d3.sum(v, (x) => x.value);
+    const res2 = d3.sum(v, (x) => x.duration);
     const red = v.reduce(function (previous, current) {
       if (current.outcome === 'skipped') {
         return 'passed';
@@ -556,10 +564,12 @@ function init(err, _res) {
     return [{
       key: '',
       outcome: red,
-      value: res2
+      duration: res2,
+      value: res2+1 // Todo maybe use a scaling factor here ?  
     } ];
   });
   let data = n.entries(res);
+
   main({
     //title: "Pytest Time breakdown"
   }, {

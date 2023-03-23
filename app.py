@@ -254,10 +254,8 @@ async def api_pull(org, repo, number):
 
                 log.warning(f"rezip... %s/%s %s ({number})", j, len(z.filelist), fx)
                 z_read = z.read(fx)
-                log.warning("z_read data size: %s", objsize.get_deep_size(z_read))
                 xs = json.loads(z_read)
                 del z_read
-                log.warning("beofre data size: %s", objsize.get_deep_size(data))
                 xs_tests = xs["tests"]
                 comp_test = []
 
@@ -279,7 +277,6 @@ async def api_pull(org, repo, number):
                 del xs
                 ## keep only what's necessary
                 data[fx.filename] = {"comp": comp_test}
-                log.warning("after data size: %s", objsize.get_deep_size(data))
 
     log.warning("json serialise")
     rz = json.dumps(data)
