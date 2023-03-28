@@ -135,8 +135,8 @@ async def collect_artifact_metadata(org: str, repo: str, pull_number: str, run_i
     with db_get_cursor() as cursor:
         try:
             res = cursor.execute("""
-                INSERT INTO action_run (organization, repo, run_id, pull_number)
-                VALUES (%s, %s, %s, %s)
+                INSERT INTO action_run (organization, repo, pull_number, run_id)
+                VALUES (%s, %s, %s, %s::bigint)
             """, (org, repo, pull_number, run_id));
             return "ok"
         except UniqueViolation:
