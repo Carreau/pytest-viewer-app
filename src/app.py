@@ -1,3 +1,4 @@
+from psycopg2.errors import UniqueViolation
 import json
 import objsize
 import sys
@@ -20,6 +21,7 @@ import requests_cache
 from dateutil.parser import isoparse
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
+from postgres import db_get_cursor
 
 load_dotenv()
 
@@ -28,8 +30,8 @@ session = requests_cache.CachedSession("../erase_cache")
 
 from quart_trio import QuartTrio
 
-app = QuartTrio(__name__)
 
+app = QuartTrio(__name__)
 log = logging.getLogger(__name__)
 
 APP_ID = environ.get("APP_ID")
@@ -126,6 +128,19 @@ async def other(org, repo):
 @app.route("/")
 async def index():
     return await render_template("index.html", org=None, repo=None, number=None)
+
+
+@app.route("/collect_artifact_metadata/<org>/<repo>/<int:pull_number>/<int:run_id>")
+async def collect_artifact_metadata(org: str, repo: str, pull_number: str, run_id: str):
+    with db_get_cursor() as cursor:
+        try:
+            res = cursor.execute("""
+                INSERT INTO action_run (organization, repo, run_id, pull_number)
+                VALUES (%s, %s, %s, %s)
+            """, (org, repo, pull_number, run_id));
+            return "ok"
+        except UniqueViolation:
+            return "duplicate"
 
 
 @app.route("/gh/<org>/<repo>/pull/<number>")
