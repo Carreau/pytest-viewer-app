@@ -1,8 +1,5 @@
 from psycopg2.errors import UniqueViolation
 import json
-import objsize
-import sys
-import pytz
 import httpx
 from quart import render_template, send_file
 import logging
@@ -10,18 +7,17 @@ from os import environ
 from base64 import b64decode
 from hashlib import sha512
 from typing import List
-
 import jwt
 import os
 import time
-import requests
 from zipfile import ZipFile
 from io import BytesIO
+import requests
 import requests_cache
-from dateutil.parser import isoparse
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
+
 from postgres import db_get_cursor
+from auth import Auth
 
 load_dotenv()
 
@@ -70,35 +66,6 @@ access_token_url = (
 )
 
 
-class Auth:
-
-    def __init__(self, access_token_url, bt):
-        self._access_token_url = access_token_url
-        self._bt = bt
-        self._idata = None
-        self._regen()
-
-    def _regen(self):
-        headers = {
-            "Authorization": f"Bearer {self._bt()}",
-            "Accept": "application/vnd.github.v3+json",
-        }
-        response = requests.post(self._access_token_url, data=b"", headers=headers)
-        self._idata = response.json()
-        print("new expires_at idata:", repr(self._idata))
-        self._expires = isoparse(self._idata["expires_at"]) - timedelta(seconds=10)
-
-    @property
-    def header(self):
-        now = datetime.now(pytz.UTC)
-        if self._expires < now:
-            print("Expired header, regenerate, (expires, now)", self._expires, now)
-            self._regen()
-        print(f"tk: token {self._idata['token']}")
-        return {
-            "Authorization": f"token {self._idata['token']}",
-            "Accept": "application/vnd.github.v3+json",
-        }
 
 
 
@@ -130,18 +97,26 @@ async def index():
     return await render_template("index.html", org=None, repo=None, number=None)
 
 
+@app.route('/action_run')
+async def list_action_runs():
+    with db_get_cursor() as cursor:
+        cursor.execute("""
+            SELECT organization, repo, pull_number, run_id FROM action_run
+        """, ());
+        return cursor.fetchall()
+
+
 @app.route("/collect_artifact_metadata/<org>/<repo>/<int:pull_number>/<int:run_id>")
 async def collect_artifact_metadata(org: str, repo: str, pull_number: str, run_id: str):
     with db_get_cursor() as cursor:
         try:
             res = cursor.execute("""
                 INSERT INTO action_run (organization, repo, pull_number, run_id)
-                VALUES (%s, %s, %s, %s::bigint)
+                                 VALUES (%s, %s, %s, %s::bigint)
             """, (org, repo, pull_number, run_id));
             return "ok"
         except UniqueViolation:
             return "duplicate"
-
 
 @app.route("/gh/<org>/<repo>/pull/<number>")
 async def pull(org, repo, number):

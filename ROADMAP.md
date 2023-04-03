@@ -4,3 +4,5 @@
 - [ ] Provide a route for the client to list all known org/repo/run_id/pull_number known to the db (essentially select from action_run)
 
 - [ ] Consume that API in the client to list known PRs
+
+- [ ] Compact json report with jq before uploading it to the artifacts
