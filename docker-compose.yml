@@ -3,6 +3,8 @@ version: "3.9"
 services:
   viewer_app_server:
     container_name: "viewer_app_server"
+    depends_on: 
+      - viewer_app_db
     restart: always
     build: .
     env_file:

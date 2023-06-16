@@ -302,7 +302,8 @@ if __name__ == '__main__':
     port = int(os.environ.get("PORT", 1234))
     print("Seen config port ", port)
     prod = os.environ.get("PROD", None)
-    if prod:
+    print("Prod= ", prod)
+    if prod or True:
         app.run(port=port, host="0.0.0.0")
     else:
         app.run(port=port)
