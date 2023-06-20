@@ -62,6 +62,16 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
         pointer-events: none;
       }
 
+      #infowrap {
+        background: var(--form-back-color);
+        margin-left: 8px;
+        margin-right: 16px;
+        padding: 8px;
+        padding-left: 18px;
+        padding-right: 18px;
+        margin-top: 10px;
+      }
+
       content {
         margin: 50px;
         border: solid thin darkgray;
@@ -113,7 +123,35 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
 
       form {
         padding: 0;
+        display: inline-block;
       }
+
+      .flex-container {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  justify-content: normal;
+  align-items: normal;
+  align-content: normal;
+}
+
+.flex-items:nth-child(1) {
+  display: block;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: auto;
+  align-self: auto;
+  order: 0;
+}
+
+.flex-items:nth-child(2) {
+  display: block;
+  flex-grow: 0;
+  flex-shrink: 1;
+  flex-basis: auto;
+  align-self: auto;
+  order: 0;
+}
     </style>
   </head>
 
@@ -125,6 +163,8 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
     {% if org %}
       <p><a href='https://github.com/{{org}}/{{repo}}/pull/{{number}}'>{{org}}/{{repo}}#{{number}}</a></p>
     {% endif %}
+   <div class="flex-container">
+   <div class="flex-items">
     <form>
       <select name="A" id="sZ">
         <option value="name" selected>Report File</option>
@@ -169,7 +209,12 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
         <option value="kind" selected>Setup/Call/Teardown</option>
         <option value="rollup" >-</option>
       </select>
-    </form>
+     </form>
+    </div flex-items> 
+    <div class="flex-items">
+      <div id='infowrap'><span id='info'>...</span></div>
+    </div>
+    </div>
     <div id='busy'><div>
 
     <!--| Layout
@@ -202,28 +247,53 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
     <script src="//d3js.org/d3.v3.min.js"></script>
     <script src="/index.js"></script>
     <script>
-        console.log('HERE')
-        fetch('/api/gh/{{org}}/{{repo}}/pull/{{number}}')
-            .then( function(resp){
-              console.log('THERE')
-              let res = resp.json()
-              console.log(res)
+
+    function handle_test_data(dx){
+        window.DX = [];
+        for (const property in dx) {
+            console.log(`${property}: ${dx[property]}`);
+            window.DX = window.DX.concat(process_reply(dx[property], property));
+        }
+        console.info(window.dx);
+        window.init();
+    }
+    console.log('HERE')
+    fetch('/api/gh/{{org}}/{{repo}}/pull/{{number}}')
+      .then(
+        function(resp){
               return res;
-}
-         )
-         .then( function(dx){
-                    window.DX = [];
-                    for (const property in dx) {
-                        console.log(`${property}: ${dx[property]}`);
-                        window.DX = window.DX.concat(process_reply(dx[property], property));
-                    }
-                     console.info(window.dx);
-                     window.init();
-                     
-                     }
+        })
+        .then(handle_test_data)
 
                             )
 
-         </script>
+    </script>
+    <script>
+      var source = new EventSource('/sse-endpoint');
+      console.log('Source started')
+      const info = document.getElementById('info');
+      source.onmessage = function (event) {
+       console.log('event', event.data);
+      };
+      source.addEventListener('message', function(event) {
+        data = JSON.parse(event.data);
+        info.innerText = data.info;
+        console.log('Message occurred:', data, 'event', event, 'id:', id, 'retry:', info, 'full event', event);
+      });
+      source.addEventListener('error', function(event) {
+        // Handle 'error' events
+        console.error('Error occurred:', event);
+      });
+
+      eventSource.addEventListener('open', function(event) {
+        // Handle 'open' events
+        console.log('Connection opened');
+      });
+
+      eventSource.addEventListener('close', function(event) {
+        // Handle 'close' events
+        console.log('Connection closed');
+      });
+    </script>
   </body>
 </html>

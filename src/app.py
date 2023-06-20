@@ -4,7 +4,7 @@ import objsize
 import sys
 import pytz
 import httpx
-from quart import render_template, send_file
+from quart import render_template, send_file, Response, make_response
 import logging
 from os import environ
 from base64 import b64decode
@@ -29,6 +29,27 @@ session = requests_cache.CachedSession("../erase_cache")
 
 
 from quart_trio import QuartTrio
+
+from dataclasses import dataclass
+
+
+@dataclass
+class ServerSentEvent:
+    data: str
+    event: str | None = None
+    id: int | None = None
+    retry: int | None = None
+
+    def encode(self) -> bytes:
+        message = f"data: {self.data}"
+        if self.event is not None:
+            message += f"\nevent: {self.event}"
+        if self.id is not None:
+            message += f"\nid: {self.id}"
+        if self.retry is not None:
+            message += f"\nretry: {self.retry}"
+        message = f"{message}\n\n"
+        return message.encode("utf-8")
 
 
 app = QuartTrio(__name__)
@@ -155,8 +176,8 @@ async def pull(org, repo, number):
 
 @app.route("/index.js")
 async def index_js():
-    print("IJS")
-    return await send_file("./templates/index.js")
+    path = os.path.dirname(os.path.realpath(__file__))
+    return await send_file(os.path.join(path, "templates", "index.js"))
 
 
 def clean_item(d):
@@ -225,6 +246,34 @@ async def list_artifacts_urls_to_download(data, head_sha, number):
 
 CACHE = {}
 
+from trio import sleep
+import json
+
+
+@app.route("/sse-endpoint")
+async def sse():
+    async def send_events():
+        for i, m in zip(
+            range(10), ["frobulate", "nobulate", "refine", "extrapole", "fetch"]
+        ):
+            data = json.dumps({"i": i, "info": m})
+            event = ServerSentEvent(data)
+            ee = event.encode()
+            print("yied ee", ee)
+            await sleep(1)
+            yield ee
+
+    response = await make_response(
+        send_events(),
+        {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Transfer-Encoding": "chunked",
+        },
+    )
+    response.timeout = None
+    return response
+
 
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
 async def api_pull(org, repo, number):
@@ -238,7 +287,7 @@ async def api_pull(org, repo, number):
     ).json()
     if "head" not in pr_data:
         log.warning("NO Head : %s", pr_data.keys())
-        log.warning(f"URL: {url} ont work", json.dumps(pr_data))
+        log.warning(f"URL: {url} wont work", json.dumps(pr_data))
         return json.dumps(pr_data)
     head = pr_data["head"]
 

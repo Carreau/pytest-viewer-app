@@ -10,10 +10,6 @@ function timeformat(value) {
   return d3.format('.3r')(value) + 'ms';
 }
 
-function onlyUnique(value, index, self) {
-  return self.indexOf(value) === index;
-}
-
 function process_report(raw, name) {
   // process raw data from pytest-json-report, and flatten it a bit
   // for latter nesting.
@@ -74,7 +70,14 @@ function process_reply(raw, name) {
     }
 
   }
-  console.log('Treated ', raw.comp.length , 'items')
+
+  // print lenght of raw comp only if raw.comp is defined
+  // (it's not the case for old reports)
+  if (raw.comp !== undefined){
+    console.log('Treated ', raw.comp.length , 'items');
+  } else {
+    console.log('rawcomp empty', raw.comp);
+  }
 
   return data;
 }
@@ -307,9 +310,6 @@ function main(opts, data) {
       return 'mixed';
     }, 'passed');
 
-    //if (d.outcome === 'mixed') {
-      //console.log(acc[1].filter(onlyUnique));
-    //}
     d._children = d.values ? d.values : d.value;
     d._children.forEach((element) => {
       element.prct = element.value / total;
