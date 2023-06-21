@@ -1,5 +1,6 @@
 from psycopg2.errors import UniqueViolation
 import json
+import shelve
 import objsize
 import sys
 import pytz
@@ -57,7 +58,7 @@ log = logging.getLogger(__name__)
 
 APP_ID = environ.get("APP_ID")
 pem_data = b64decode(environ.get("PEM64"))
-print(APP_ID, sha512(pem_data).hexdigest())
+print("APP_ID", APP_ID, "PEM DIGEST", sha512(pem_data).hexdigest())
 
 
 instance = jwt.JWT()
@@ -83,7 +84,6 @@ headers = {"Authorization": f"Bearer {PAT}", "Accept": "application/vnd.github.v
 
 inst = session.get("https://api.github.com/app/installations", headers=headers).json()
 
-print(inst)
 
 installation_id = inst[0]["id"]
 access_token_url = (
@@ -106,7 +106,7 @@ class Auth:
         }
         response = requests.post(self._access_token_url, data=b"", headers=headers)
         self._idata = response.json()
-        print("new expires_at idata:", repr(self._idata))
+        print("new expires_at idata:", repr(self._idata["expires_at"]))
         self._expires = isoparse(self._idata["expires_at"]) - timedelta(seconds=10)
 
     @property
@@ -244,7 +244,15 @@ async def list_artifacts_urls_to_download(data, head_sha, number):
     return acc
 
 
-CACHE = {}
+from pathlib import Path
+
+pkl = Path("./.cache.pkl.db")
+if pkl.exists():
+    print("USING SHELVE")
+    CACHE = shelve.open(".cache.pkl")
+else:
+    print("NOT USING SHELVE", pkl, "does not extis")
+    CACHE = {}
 
 from trio import sleep
 import json
@@ -277,82 +285,129 @@ async def sse():
 
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
 async def api_pull(org, repo, number):
-    log.warning("API Pull")
-    assert org.isalnum()
-    assert repo.isalnum()
-    assert number.isnumeric()
-    url = f"https://api.github.com/repos/{org}/{repo}/pulls/{number}"
-    pr_data = requests.get(
-        url, headers=AUTH.header
-    ).json()
-    if "head" not in pr_data:
-        log.warning("NO Head : %s", pr_data.keys())
-        log.warning(f"URL: {url} wont work", json.dumps(pr_data))
-        return json.dumps(pr_data)
-    head = pr_data["head"]
 
-    data = await collect_most_recent_workflow_runs(org, repo, head["ref"])
+    async def gen_api_pull(org, repo, number):
+        log.warning("API Pull")
+        assert org.isalnum()
+        assert repo.isalnum()
+        assert number.isnumeric()
+        url = f"https://api.github.com/repos/{org}/{repo}/pulls/{number}"
+        pr_data = requests.get(url, headers=AUTH.header).json()
+        if "head" not in pr_data:
+            log.warning("NO Head : %s", pr_data.keys())
+            log.warning(f"URL: {url} wont work", json.dumps(pr_data))
+            yield ServerSentEvent(json.dumps({"info": "no head"})).encode()
+            raise StopIteration
+            # return json.dumps(pr_data)
+        head = pr_data["head"]
 
-    log.warning("Looking for Artifacts...")
-    acc = await list_artifacts_urls_to_download(data, head["sha"], number)
+        data = await collect_most_recent_workflow_runs(org, repo, head["ref"])
 
-    async with httpx.AsyncClient(follow_redirects=True) as client:
-        data = {}
-        for i, archive in enumerate(acc):
-            log.warning(f"Requesting Content... %s ({number})", i)
-            print("archive", archive)
-            if archive in CACHE:
-                print("CACHE HIT")
-                content = CACHE[archive]
-            else:
-                zp = await client.get(archive, headers=AUTH.header)
-                log.warning(f"Unzipping in memory... %s ({number})", i)
-                zp.raise_for_status()
-                content = zp.content
-                CACHE[archive] = content
-            z = ZipFile(BytesIO(content))
-            for j, fx in enumerate(z.filelist):
-                import gc
+        log.warning("Looking for Artifacts...")
+        yield ServerSentEvent(
+            json.dumps({"info": "Looking for GH artifacts..."})
+        ).encode()
+        acc = await list_artifacts_urls_to_download(data, head["sha"], number)
 
-                gc.collect()
+        yield ServerSentEvent(
+            json.dumps({"info": f"Requesting list of artifact from GH..."})
+        ).encode()
 
-                log.warning(f"rezip... %s/%s %s ({number})", j, len(z.filelist), fx)
-                z_read = z.read(fx)
-                xs = json.loads(z_read)
-                del z_read
-                xs_tests = xs["tests"]
-                comp_test = []
+        async with httpx.AsyncClient(follow_redirects=True) as client:
+            data = {}
+            la = len(acc)
+            for i, archive in enumerate(acc):
+                log.warning(f"Requesting Content... %s ({number})", i)
+                print("archive", archive)
+                if archive in CACHE:
+                    print("CACHE HIT")
+                    content = CACHE[archive]
+                else:
+                    yield ServerSentEvent(
+                        json.dumps({"info": f"Downloading artifacts {i+1}/{la}..."})
+                    ).encode()
+                    zp = await client.get(archive, headers=AUTH.header)
+                    yield ServerSentEvent(
+                        json.dumps({"info": f"Got artifacts {i+1}/{la}..."})
+                    ).encode()
+                    log.warning(f"Unzipping in memory... %s ({number})", i)
+                    zp.raise_for_status()
+                    content = zp.content
+                    print("PUT IN CACHE", archive)
+                    CACHE[archive] = content
+                    CACHE.sync()
+                yield ServerSentEvent(
+                    json.dumps({"info": f"Extracting artifact {i+1}..."})
+                ).encode()
+                z = ZipFile(BytesIO(content))
+                lll = len(z.filelist)
+                for j, fx in enumerate(z.filelist):
+                    yield ServerSentEvent(
+                        json.dumps({"info": f"Processing file {i+1}-{j+1}/{lll}..."})
+                    ).encode()
+                    import gc
 
-                for item in xs_tests:
-                    if "outcome" in item and item["outcome"] == "skipped":
-                        continue
-                    if "call" in item:
-                        comp_test.append(
-                            (
-                                item["nodeid"],
-                                item["call"]["duration"],
-                                item["setup"]["duration"],
-                                item["teardown"]["duration"],
+                    gc.collect()
+
+                    log.warning(f"rezip... %s/%s %s ({number})", j, len(z.filelist), fx)
+                    z_read = z.read(fx)
+                    xs = json.loads(z_read)
+                    del z_read
+                    xs_tests = xs["tests"]
+                    comp_test = []
+
+                    for item in xs_tests:
+                        if "outcome" in item and item["outcome"] == "skipped":
+                            continue
+                        if "call" in item:
+                            comp_test.append(
+                                (
+                                    item["nodeid"],
+                                    item["call"]["duration"],
+                                    item["setup"]["duration"],
+                                    item["teardown"]["duration"],
+                                )
                             )
-                        )
-                    else:
-                        print(item)
+                        else:
+                            print(item)
 
-                del xs
-                ## keep only what's necessary
-                data[fx.filename] = {"comp": comp_test}
+                    del xs
+                    ## keep only what's necessary
+                    data[fx.filename] = {"comp": comp_test}
 
-    log.warning("json serialise")
-    rz = json.dumps(data)
-    log.warning("sending... %s Mb", len(rz) / 1024 / 1024)
-    return rz
+        yield ServerSentEvent(json.dumps({"info": f"Data ready, sending..."})).encode()
+        yield ServerSentEvent(json.dumps({"test_data": data, "info": "done"})).encode()
+        yield ServerSentEvent(
+            json.dumps({"close": True, "info": "closing connection"})
+        ).encode()
+        # log.warning("json serialise")
+        # rz = json.dumps(data)
+        # log.warning("sending... %s Mb", len(rz) / 1024 / 1024)
+        # return rz
+
+    print("make response")
+    response = await make_response(
+        gen_api_pull(org, repo, number),
+        {
+            "Content-Type": "text/event-stream",
+            "Cache-Control": "no-cache",
+            "Transfer-Encoding": "chunked",
+        },
+    )
+    response.timeout = None
+    return response
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 1234))
     print("Seen config port ", port)
     prod = os.environ.get("PROD", None)
     print("Prod= ", prod)
-    if prod or True:
-        app.run(port=port, host="0.0.0.0")
-    else:
-        app.run(port=port)
+    try:
+        if prod or True:
+            app.run(port=port, host="0.0.0.0")
+        else:
+            app.run(port=port)
+    except KeyboardInterrupt:
+        print("CLOSING CACHE")
+        CACHE.close()
+        raise

@@ -160,9 +160,6 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
     ondrop="dropHandler(event);"
     ondragover="dragOverHandler(event);"
     >
-    {% if org %}
-      <p><a href='https://github.com/{{org}}/{{repo}}/pull/{{number}}'>{{org}}/{{repo}}#{{number}}</a></p>
-    {% endif %}
    <div class="flex-container">
    <div class="flex-items">
     <form>
@@ -212,7 +209,11 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
      </form>
     </div flex-items> 
     <div class="flex-items">
-      <div id='infowrap'><span id='info'>...</span></div>
+      <div id='infowrap'>
+      {% if org %}
+        <a href='https://github.com/{{org}}/{{repo}}/pull/{{number}}'>{{org}}/{{repo}}#{{number}}</a>
+      {% endif %}
+      </div>
     </div>
     </div>
     <div id='busy'><div>
@@ -228,7 +229,7 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
 
     <div id="chart"></div>
     <content>
-      <p id="tip">
+      <p id="info">
         Drag pytest json report files and select the you decomposition you like
         above.
       </p>
@@ -248,52 +249,67 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
     <script src="/index.js"></script>
     <script>
 
-    function handle_test_data(dx){
-        window.DX = [];
-        for (const property in dx) {
-            console.log(`${property}: ${dx[property]}`);
-            window.DX = window.DX.concat(process_reply(dx[property], property));
+    function start(){
+      console.log('start')
+
+      const url = new URL(window.location);
+      const pathname = url.pathname;
+      const parts = pathname.split('/');
+      if (parts.length != 6) {
+        console.error('Invalid URL, got only', parts.length, 'parts', parts);
+        return;
+      }
+      console.log('pathname', pathname);
+      // add various checksum that we have indeed 6 parameters, 
+      // and that n, gh, pull are literal strings '', 'gh', 'pull'
+      // and that number is a number.
+      const [n, gh, org, repo, pull, number] = parts;
+      if (n != '' || gh != 'gh' || pull != 'pull') {
+        console.error('Invalid URL' , parts);
+        return;
+      }
+
+
+
+
+      function handle_test_data(dx){
+          window.DX = [];
+          for (const property in dx) {
+              console.log(`${property}: ${dx[property]}`);
+              window.DX = window.DX.concat(process_reply(dx[property], property));
+          }
+          console.info(window.dx);
+          window.init();
+      }
+
+      const eventSource = new EventSource('/api'+url.pathname);
+      console.log('ade eventSource');
+      eventSource.addEventListener('message',function(event) {
+        console.log('message');
+        const data = JSON.parse(event.data);
+        if (data.close) {
+          console.log('closing connection');
+          eventSource.close();
+        };
+        if (data.info) {
+          document.getElementById('info').innerText = data.info;
+        } 
+        if (data.test_data) {
+          console.log('data', data);
+          setTimeout(function(){handle_test_data(data.test_data)}, 0);
         }
-        console.info(window.dx);
-        window.init();
+      });
+
+      eventSource.addEventListener('close',function(event) {
+        console.log('closed connection');
+        eventSource.close();
+
+      });
     }
-    console.log('HERE')
-    fetch('/api/gh/{{org}}/{{repo}}/pull/{{number}}')
-      .then(
-        function(resp){
-              return res;
-        })
-        .then(handle_test_data)
+    start();
 
-                            )
+                            
 
-    </script>
-    <script>
-      var source = new EventSource('/sse-endpoint');
-      console.log('Source started')
-      const info = document.getElementById('info');
-      source.onmessage = function (event) {
-       console.log('event', event.data);
-      };
-      source.addEventListener('message', function(event) {
-        data = JSON.parse(event.data);
-        info.innerText = data.info;
-        console.log('Message occurred:', data, 'event', event, 'id:', id, 'retry:', info, 'full event', event);
-      });
-      source.addEventListener('error', function(event) {
-        // Handle 'error' events
-        console.error('Error occurred:', event);
-      });
-
-      eventSource.addEventListener('open', function(event) {
-        // Handle 'open' events
-        console.log('Connection opened');
-      });
-
-      eventSource.addEventListener('close', function(event) {
-        // Handle 'close' events
-        console.log('Connection closed');
-      });
     </script>
   </body>
 </html>

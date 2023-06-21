@@ -10,19 +10,19 @@ function timeformat(value) {
   return d3.format('.3r')(value) + 'ms';
 }
 
-function process_report(raw, name) {
+function process_report(raw, filename) {
   // process raw data from pytest-json-report, and flatten it a bit
   // for latter nesting.
-  // name: will be the name of the uploaded file.
+  // filename: will be the filename of the uploaded file.
   console.log('PROCESS', raw);
 
   let data = [];
 
 
-  for (test of raw.tests) {
+  for (let test of raw.tests) {
     const [file, ...rest] = test.nodeid.split('::');
     const group = rest.join('::');
-    for (k of ['call', 'setup', 'teardown']) {
+    for (let k of ['call', 'setup', 'teardown']) {
       try {
         let item = {};
         item.key = file;
@@ -31,7 +31,7 @@ function process_report(raw, name) {
         item.value = test[k].duration * 1000;
         item.duration = test[k].duration * 1000;
         item.outcome = test[k].outcome;
-        item.name = name;
+        item.name = filename;
         data.push(item);
       } catch (e) {
         console.log('Error 41');
@@ -50,14 +50,14 @@ function process_reply(raw, name) {
 
   let data = [];
   for (let i in raw.comp){
-    const [nodeid, call, setup, teardown] = raw.comp[i]
+    const [nodeid, call, setup, teardown] = raw.comp[i];
     const [file, ...rest] = nodeid.split('::');
     const group = rest.join('::');
     const re = { call:call,
-           setup:setup,
-           teardown:teardown
-    }
-    for (k of ['call', 'setup', 'teardown']) {
+           setup: setup,
+           teardown: teardown
+    };
+    for (let k of ['call', 'setup', 'teardown']) {
       let item = {};
       item.key = file;
       item.group = group;
@@ -71,7 +71,7 @@ function process_reply(raw, name) {
 
   }
 
-  // print lenght of raw comp only if raw.comp is defined
+  // print length of raw comp only if raw.comp is defined
   // (it's not the case for old reports)
   if (raw.comp !== undefined){
     console.log('Treated ', raw.comp.length , 'items');
