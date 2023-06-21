@@ -82,19 +82,6 @@ function process_reply(raw, name) {
   return data;
 }
 
-function readFileAsync(file) {
-  return new Promise((resolve, reject) => {
-    let reader = new FileReader();
-
-    reader.onload = () => {
-      resolve(reader.result);
-    };
-
-    reader.onerror = reject;
-
-    reader.readAsArrayBuffer(file);
-  });
-}
 
 function dropHandler(ev) {
   // we let user drop file,
@@ -108,20 +95,20 @@ function dropHandler(ev) {
 
   if (ev.dataTransfer.items) {
     // Use DataTransferItemList interface to access the file(s)
-    let processing_count = ev.dataTransfer.items.length;
+    let processingCount = ev.dataTransfer.items.length;
     let processed = 0;
     for (let i = 0; i < ev.dataTransfer.items.length; i++) {
       // If dropped items aren't files, reject them
       if (ev.dataTransfer.items[i].kind === 'file') {
         let file = ev.dataTransfer.items[i].getAsFile();
-        const name = file.name;
+        const filename = file.name;
         const fr = new FileReader();
         fr.onloadend = function () {
-          raw = JSON.parse(this.result);
+          const raw = JSON.parse(this.result);
 
-          window.DX = window.DX.concat(process_report(raw, name));
+          window.DX = window.DX.concat(process_report(raw, filename));
           processed = processed + 1;
-          if (processed == processing_count) {
+          if (processed === processingCount) {
             init();
           }
         };
@@ -261,11 +248,11 @@ function main(opts, data) {
     );
   }
 
-  function initialize(root) {
-    root.x = root.y = 0;
-    root.dx = width;
-    root.dy = height;
-    root.depth = 0;
+  function initialize(r) {
+    r.x = r.y = 0;
+    r.dx = width;
+    r.dy = height;
+    r.depth = 0;
   }
 
   // Aggregate the values for internal nodes. This is normally done by the
@@ -285,7 +272,6 @@ function main(opts, data) {
       d.values.reduce(
         function (previous, current, index, array) {
           const _t = flatten(current);
-          const value = _t[0];
           const duration = _t[0];
           const outcome = _t[1];
           return [previous[0].concat(duration), previous[1].concat(outcome)];
@@ -303,7 +289,7 @@ function main(opts, data) {
     d.value = total;
     d.duration = total;
     d.outcome = acc[1].reduce(function (p, c) {
-      if (p == c) {
+      if (p === c) {
         return c;
       }
       //console.log('PC', p, c);
@@ -578,13 +564,6 @@ function init(err, _res) {
   });
 }
 
-//if (window.location.hash === "") {
-//    //d3.json("x.json", function(err, data) {
-//    //    DATA = data;
-//    //    console.log("HERE", DATA)
-//    //    init()
-//    //});
-//}
 window.onresize = init;
 window.init = init;
 window.process_report = process_report;
@@ -594,5 +573,3 @@ document.getElementById('sA').addEventListener('change', init);
 document.getElementById('sB').addEventListener('change', init);
 document.getElementById('sC').addEventListener('change', init);
 document.getElementById('sD').addEventListener('change', init);
-
-//document.getElementById("layout").addEventListener("change", init)

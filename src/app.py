@@ -1,37 +1,74 @@
-from psycopg2.errors import UniqueViolation
 import json
-import shelve
-import objsize
-import sys
-import pytz
-import httpx
-from quart import render_template, send_file, Response, make_response
 import logging
-from os import environ
-from base64 import b64decode
-from hashlib import sha512
-from typing import List
-
-import jwt
 import os
+import shelve
+import sys
 import time
-import requests
-from zipfile import ZipFile
+from base64 import b64decode
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from hashlib import sha512
 from io import BytesIO
+from os import environ, environb
+from pathlib import Path
+from typing import List, NewType
+from zipfile import ZipFile
+
+import httpx
+import jwt
+import pytz
+import requests
 import requests_cache
 from dateutil.parser import isoparse
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
-from postgres import db_get_cursor
+from psycopg2.errors import UniqueViolation
+from quart import Response, make_response, render_template, send_file
+from trio import sleep
+
+from .postgres import db_get_cursor
+
+CommitSha = NewType("CommitSha", str)
+
+
+@dataclass
+class WorkflowRun:
+    id: int
+    name: str
+    head_branch: str
+    head_sha: str
+    status: str
+    conclusion: str
+    url: str
+    html_url: str
+    created_at: str
+    updated_at: str
+    artifacts_url: CommitSha
+
+    @classmethod
+    def from_json(cls, data):
+        return cls(
+            id=data["id"],
+            name=data["name"],
+            head_branch=data["head_branch"],
+            head_sha=CommitSha(data["head_sha"]),
+            status=data["status"],
+            conclusion=data["conclusion"],
+            url=data["url"],
+            html_url=data["html_url"],
+            created_at=data["created_at"],
+            updated_at=data["updated_at"],
+            artifacts_url=data["artifacts_url"],
+        )
+
 
 load_dotenv()
 
 session = requests_cache.CachedSession("../erase_cache")
 
 
-from quart_trio import QuartTrio
-
 from dataclasses import dataclass
+
+from quart_trio import QuartTrio
 
 
 @dataclass
@@ -57,7 +94,7 @@ app = QuartTrio(__name__)
 log = logging.getLogger(__name__)
 
 APP_ID = environ.get("APP_ID")
-pem_data = b64decode(environ.get("PEM64"))
+pem_data = b64decode(environb.get("PEM64"))
 print("APP_ID", APP_ID, "PEM DIGEST", sha512(pem_data).hexdigest())
 
 
@@ -78,7 +115,6 @@ def bt():
     return instance.encode(payload, pem_file, alg="RS256")
 
 
-
 PAT = bt()
 headers = {"Authorization": f"Bearer {PAT}", "Accept": "application/vnd.github.v3+json"}
 
@@ -92,7 +128,6 @@ access_token_url = (
 
 
 class Auth:
-
     def __init__(self, access_token_url, bt):
         self._access_token_url = access_token_url
         self._bt = bt
@@ -120,7 +155,6 @@ class Auth:
             "Authorization": f"token {self._idata['token']}",
             "Accept": "application/vnd.github.v3+json",
         }
-
 
 
 AUTH = Auth(access_token_url, bt)
@@ -152,13 +186,17 @@ async def index():
 
 
 @app.route("/collect_artifact_metadata/<org>/<repo>/<int:pull_number>/<int:run_id>")
-async def collect_artifact_metadata(org: str, repo: str, pull_number: str, run_id: str):
+async def collect_artifact_metadata(org: str, repo: str, pull_number: int, run_id: str):
     with db_get_cursor() as cursor:
         try:
-            res = cursor.execute("""
+            # Should we have a ON CONFLICT (organization, repo, run_id, pull_number) DO NOTHING;
+            res = cursor.execute(
+                """
                 INSERT INTO action_run (organization, repo, run_id, pull_number)
                 VALUES (%s, %s, %s, %s)
-            """, (org, repo, pull_number, run_id));
+            """,
+                (org, repo, pull_number, run_id),
+            )
             return "ok"
         except UniqueViolation:
             return "duplicate"
@@ -181,21 +219,28 @@ async def index_js():
 
 
 def clean_item(d):
-    del d['created']
-    del d['duration']
-    del d['exitcode']
-    del d['environment']
-    del d['root']
-    del d['collectors']
-    del d['summary']
-    del d['warnings']
-    for t in d['tests']:
-        del t['keywords']
-        del t['lineno']
-        del t['outcome']
+    del d["created"]
+    del d["duration"]
+    del d["exitcode"]
+    del d["environment"]
+    del d["root"]
+    del d["collectors"]
+    del d["summary"]
+    del d["warnings"]
+    for t in d["tests"]:
+        del t["keywords"]
+        del t["lineno"]
+        del t["outcome"]
 
 
-async def collect_most_recent_workflow_runs(org: str, repo: str, ref: str) -> List[str]:
+async def collect_most_recent_workflow_runs(
+    org: str, repo: str, ref: str
+) -> List[WorkflowRun]:
+    """
+    Return a list of workflow run for the most recent workflow runs
+
+
+    """
     data = []
     async with httpx.AsyncClient() as client:
         for i in range(50):
@@ -213,11 +258,11 @@ async def collect_most_recent_workflow_runs(org: str, repo: str, ref: str) -> Li
                     headers=AUTH.header,
                 )
             ).json()
-            data.extend(d["workflow_runs"])
+            wrs = [WorkflowRun.from_json(x) for x in d["workflow_runs"]]
+            data.extend(wrs)
             if len(d["workflow_runs"]) == 0:
                 log.warning("No more run after page %s", i)
                 break
-
     return data
 
 
@@ -225,26 +270,31 @@ async def list_artifacts_urls_to_download(data, head_sha, number):
     acc = []
     async with httpx.AsyncClient(follow_redirects=True) as client:
         for i, art in enumerate(
-            {d["artifacts_url"] for d in data if d["head_sha"] == head_sha}
+            {d.artifacts_url for d in data if d.head_sha == head_sha}
         ):
-            data = (await client.get(
-                art,
-                headers=AUTH.header,
-            )).json()
-            log.warning("Found Artifacts %s on page %s (pr %s)", len(data["artifacts"]), i, number)
+            data = (
+                await client.get(
+                    art,
+                    headers=AUTH.header,
+                )
+            ).json()
+            log.warning(
+                "Found Artifacts %s on page %s (pr %s)",
+                len(data["artifacts"]),
+                i,
+                number,
+            )
 
             for artifact in data["artifacts"]:
-                log.info('Artifact:', artifact['name'])
+                log.info("Artifact:", artifact["name"])
                 if "pytest" in artifact["name"]:
                     log.warning("Found pytest in name for %s", artifact["name"])
                     acc.append(artifact["archive_download_url"])
 
-        log.info('Found %s artifacts for PR %s with pytest in name', len(acc), number)
+        log.info("Found %s artifacts for PR %s with pytest in name", len(acc), number)
 
     return acc
 
-
-from pathlib import Path
 
 pkl = Path("./.cache.pkl.db")
 if pkl.exists():
@@ -252,10 +302,7 @@ if pkl.exists():
     CACHE = shelve.open(".cache.pkl")
 else:
     print("NOT USING SHELVE", pkl, "does not extis")
-    CACHE = {}
-
-from trio import sleep
-import json
+    CACHE = {}  # type : ignore[assignment]
 
 
 @app.route("/sse-endpoint")
@@ -285,7 +332,6 @@ async def sse():
 
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
 async def api_pull(org, repo, number):
-
     async def gen_api_pull(org, repo, number):
         log.warning("API Pull")
         assert org.isalnum()
@@ -301,13 +347,15 @@ async def api_pull(org, repo, number):
             # return json.dumps(pr_data)
         head = pr_data["head"]
 
-        data = await collect_most_recent_workflow_runs(org, repo, head["ref"])
+        wrs: List[WorkflowRun] = await collect_most_recent_workflow_runs(
+            org, repo, head["ref"]
+        )
 
         log.warning("Looking for Artifacts...")
         yield ServerSentEvent(
             json.dumps({"info": "Looking for GH artifacts..."})
         ).encode()
-        acc = await list_artifacts_urls_to_download(data, head["sha"], number)
+        acc = await list_artifacts_urls_to_download(wrs, head["sha"], number)
 
         yield ServerSentEvent(
             json.dumps({"info": f"Requesting list of artifact from GH..."})
@@ -397,7 +445,8 @@ async def api_pull(org, repo, number):
     response.timeout = None
     return response
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     port = int(os.environ.get("PORT", 1234))
     print("Seen config port ", port)
     prod = os.environ.get("PROD", None)
