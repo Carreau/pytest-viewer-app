@@ -93,7 +93,7 @@ app = QuartTrio(__name__)
 log = logging.getLogger(__name__)
 
 APP_ID = environ.get("APP_ID")
-pem_data = b64decode(environb.get("PEM64"))
+pem_data = b64decode(environb.get("PEM64"))  # type:ignore
 print("APP_ID", APP_ID, "PEM DIGEST", sha512(pem_data).hexdigest())
 
 
@@ -298,10 +298,10 @@ async def list_artifacts_urls_to_download(data, head_sha, number):
 pkl = Path("./.cache.pkl.db")
 if pkl.exists():
     print("USING SHELVE")
-    CACHE = shelve.open(".cache.pkl")
+    CACHE = shelve.open(".cache.pkl")  # type: ignore
 else:
     print("NOT USING SHELVE", pkl, "does not extis")
-    CACHE = {}  # type : ignore[assignment]
+    CACHE = {}  # type: ignore
 
 
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
