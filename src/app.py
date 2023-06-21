@@ -23,7 +23,6 @@ from dateutil.parser import isoparse
 from dotenv import load_dotenv
 from psycopg2.errors import UniqueViolation
 from quart import Response, make_response, render_template, send_file
-from trio import sleep
 
 from .postgres import db_get_cursor
 
@@ -303,31 +302,6 @@ if pkl.exists():
 else:
     print("NOT USING SHELVE", pkl, "does not extis")
     CACHE = {}  # type : ignore[assignment]
-
-
-@app.route("/sse-endpoint")
-async def sse():
-    async def send_events():
-        for i, m in zip(
-            range(10), ["frobulate", "nobulate", "refine", "extrapole", "fetch"]
-        ):
-            data = json.dumps({"i": i, "info": m})
-            event = ServerSentEvent(data)
-            ee = event.encode()
-            print("yied ee", ee)
-            await sleep(1)
-            yield ee
-
-    response = await make_response(
-        send_events(),
-        {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            "Transfer-Encoding": "chunked",
-        },
-    )
-    response.timeout = None
-    return response
 
 
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
