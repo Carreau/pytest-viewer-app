@@ -43,5 +43,12 @@ def ping(name: str, formal: bool = False):
     print(f"Bye {name}!")
 
 
+@app.command()
+def serve():
+    from .app import main
+
+    main()
+
+
 if __name__ == "__main__":
     app()

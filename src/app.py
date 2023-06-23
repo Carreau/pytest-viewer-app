@@ -26,38 +26,9 @@ from quart import Response, make_response, render_template, send_file
 
 from .postgres import db_get_cursor
 
-CommitSha = NewType("CommitSha", str)
 
 
-@dataclass
-class WorkflowRun:
-    id: int
-    name: str
-    head_branch: str
-    head_sha: str
-    status: str
-    conclusion: str
-    url: str
-    html_url: str
-    created_at: str
-    updated_at: str
-    artifacts_url: CommitSha
-
-    @classmethod
-    def from_json(cls, data):
-        return cls(
-            id=data["id"],
-            name=data["name"],
-            head_branch=data["head_branch"],
-            head_sha=CommitSha(data["head_sha"]),
-            status=data["status"],
-            conclusion=data["conclusion"],
-            url=data["url"],
-            html_url=data["html_url"],
-            created_at=data["created_at"],
-            updated_at=data["updated_at"],
-            artifacts_url=data["artifacts_url"],
-        )
+from .github_types import WorkflowRun, CommitSha, RunId, PullRequest
 
 
 load_dotenv()
@@ -90,11 +61,16 @@ class ServerSentEvent:
 
 
 app = QuartTrio(__name__)
+logging.basicConfig(
+    format="%(asctime)s - %(levelname)s - %(pathname)s:%(lineno)d - %(message)s",
+    level=logging.INFO,
+)
 log = logging.getLogger(__name__)
 
 APP_ID = environ.get("APP_ID")
-pem_data = b64decode(environb.get("PEM64"))  # type:ignore
-print("APP_ID", APP_ID, "PEM DIGEST", sha512(pem_data).hexdigest())
+pem_b = environb.get(b"PEM64")
+pem_data = b64decode(pem_b)  # type:ignore
+log.info("APP_ID %s PEM DIGEST %s", APP_ID, sha512(pem_data).hexdigest())
 
 
 instance = jwt.JWT()
@@ -139,17 +115,22 @@ class Auth:
             "Accept": "application/vnd.github.v3+json",
         }
         response = requests.post(self._access_token_url, data=b"", headers=headers)
+        # the remaining number of requests you can make with the token is
+        # returned in the X-RateLimit-Remaining header.
+
+        log.debug("response headers %s", response.headers)
         self._idata = response.json()
-        print("new expires_at idata:", repr(self._idata["expires_at"]))
+        log.info("new expires_at idata: %r", self._idata["expires_at"])
         self._expires = isoparse(self._idata["expires_at"]) - timedelta(seconds=10)
 
     @property
     def header(self):
         now = datetime.now(pytz.UTC)
         if self._expires < now:
-            print("Expired header, regenerate, (expires, now)", self._expires, now)
+            log.info(
+                "Expired header, regenerate, (expires, now) %s %", self._expires, now
+            )
             self._regen()
-        print(f"tk: token {self._idata['token']}")
         return {
             "Authorization": f"token {self._idata['token']}",
             "Accept": "application/vnd.github.v3+json",
@@ -162,7 +143,6 @@ AUTH = Auth(access_token_url, bt)
 response = requests.post(access_token_url, data=b"", headers=headers)
 
 idata = response.json()
-print(idata)
 
 
 h2 = {
@@ -184,8 +164,12 @@ async def index():
     return await render_template("index.html", org=None, repo=None, number=None)
 
 
-@app.route("/collect_artifact_metadata/<org>/<repo>/<int:pull_number>/<int:run_id>")
+@app.route("/collect_artifact_metadata/<org>/<repo>/<int:pull_number>/<run_id>")
 async def collect_artifact_metadata(org: str, repo: str, pull_number: int, run_id: str):
+    assert isinstance(org, str)
+    assert isinstance(repo, str)
+    assert isinstance(pull_number, int)
+    assert isinstance(run_id, str)
     with db_get_cursor() as cursor:
         try:
             # Should we have a ON CONFLICT (organization, repo, run_id, pull_number) DO NOTHING;
@@ -194,7 +178,7 @@ async def collect_artifact_metadata(org: str, repo: str, pull_number: int, run_i
                 INSERT INTO action_run (organization, repo, run_id, pull_number)
                 VALUES (%s, %s, %s, %s)
             """,
-                (org, repo, pull_number, run_id),
+                (org, repo, run_id, pull_number),
             )
             return "ok"
         except UniqueViolation:
@@ -233,17 +217,25 @@ def clean_item(d):
 
 
 async def collect_most_recent_workflow_runs(
-    org: str, repo: str, ref: str
+    org: str, repo: str, ref: str, sha: CommitSha
 ) -> List[WorkflowRun]:
     """
     Return a list of workflow run for the most recent workflow runs
 
-
+    This is a workaround from GitHub not allowing us to get all runs for a given
+    PR.
     """
-    data = []
+    w_runs: List[WorkflowRun] = []
     async with httpx.AsyncClient() as client:
+        log.warning(
+            "Looking for runs artifacts on for %s/%s, ref=%s sha=%s",
+            org,
+            repo,
+            ref,
+            sha,
+        )
         for i in range(50):
-            log.warning("Looking for runs artifacts %s", i)
+            log.warning("Looking for runs artifacts on page %s", i)
 
             d = (
                 await client.get(
@@ -252,60 +244,94 @@ async def collect_most_recent_workflow_runs(
                         "per_pages": 100,
                         "page": i,
                         "event": "pull_request",
-                        "branch": ref,
+                        # "branch": ref,
+                        "head_sha": sha,
+                        # it might be interested to also ast for hte head_sha
+                        # parameter if we knkow the pr numbe
                     },
                     headers=AUTH.header,
                 )
             ).json()
             wrs = [WorkflowRun.from_json(x) for x in d["workflow_runs"]]
-            data.extend(wrs)
+            w_runs.extend(wrs)
             if len(d["workflow_runs"]) == 0:
-                log.warning("No more run after page %s", i)
+                # we do get a `total_count` so we might be able to do better
+                log.info("No more run after page %s", i)
                 break
-    return data
+    return w_runs
 
 
-async def list_artifacts_urls_to_download(data, head_sha, number):
+async def list_artifacts_urls_to_download(
+    data: List[WorkflowRun], head_sha: CommitSha, number: int
+) -> List[str]:
+    """
+    Filter worflow runs that both:
+        - have the same head_sha as the one we want
+        - have pytest in the name of the artifact
+    """
     acc = []
     async with httpx.AsyncClient(follow_redirects=True) as client:
-        for i, art in enumerate(
-            {d.artifacts_url for d in data if d.head_sha == head_sha}
-        ):
-            data = (
-                await client.get(
-                    art,
-                    headers=AUTH.header,
-                )
-            ).json()
+        for i, d in enumerate(data):
+            print("analysing workflow run", d.id)
+            print("    head_sha", d.head_sha)
+            print("    id:", d.id)
+            print("    artifact_url", d.artifacts_url)
+            print("    artifact contains id:", str(d.id) in d.artifacts_url)
+            if d.head_sha != head_sha:
+                log.warning("Skipping workflow %s, head sha does not match", d.id)
+                continue
+            response = await client.get(
+                d.artifacts_url,
+                headers=AUTH.header,
+            )
+            data2 = response.json()
+            print("x-ratelimit-remaining:", response.headers["X-RateLimit-Remaining"])
             log.warning(
                 "Found Artifacts %s on page %s (pr %s)",
-                len(data["artifacts"]),
-                i,
-                number,
+                str(len(data2["artifacts"])),
+                str(i),
+                str(number),
             )
 
-            for artifact in data["artifacts"]:
-                log.info("Artifact:", artifact["name"])
+            for artifact in data2["artifacts"]:
+                log.info("Artifact: %s", artifact["name"])
                 if "pytest" in artifact["name"]:
-                    log.warning("Found pytest in name for %s", artifact["name"])
+                    log.warning(
+                        "Found pytest in name for %s in workflow %s, workflod id: %s",
+                        artifact["name"],
+                        d.artifacts_url,
+                        d.id,
+                    )
                     acc.append(artifact["archive_download_url"])
 
         log.info("Found %s artifacts for PR %s with pytest in name", len(acc), number)
 
-    return acc
+    return list(set(acc))
 
 
 pkl = Path("./.cache.pkl.db")
 if pkl.exists():
     print("USING SHELVE")
     CACHE = shelve.open(".cache.pkl")  # type: ignore
+    SYNC = True
 else:
     print("NOT USING SHELVE", pkl, "does not extis")
     CACHE = {}  # type: ignore
+    SYNC = False
 
 
 @app.route("/api/gh/<org>/<repo>/pull/<number>")
-async def api_pull(org, repo, number):
+async def api_pull(org: str, repo: str, number: str):
+    """
+    Server sent event that should finally yield the json data for the data of
+    the relevant PR
+
+
+    """
+    assert org.isalnum()
+    assert repo.isalnum()
+    assert number.isnumeric()
+
     async def gen_api_pull(org, repo, number):
         log.warning("API Pull")
         assert org.isalnum()
@@ -319,17 +345,23 @@ async def api_pull(org, repo, number):
             yield ServerSentEvent(json.dumps({"info": "no head"})).encode()
             raise StopIteration
             # return json.dumps(pr_data)
-        head = pr_data["head"]
+        pr = PullRequest.from_json(pr_data)
+        head = pr.head
 
         wrs: List[WorkflowRun] = await collect_most_recent_workflow_runs(
-            org, repo, head["ref"]
+            org, repo, head.ref, head.sha
         )
 
         log.warning("Looking for Artifacts...")
         yield ServerSentEvent(
             json.dumps({"info": "Looking for GH artifacts..."})
         ).encode()
-        acc = await list_artifacts_urls_to_download(wrs, head["sha"], number)
+        print("Workflow runs id:", [(w.id, w.head_sha) for w in wrs])
+
+        for w in wrs:
+            await collect_artifact_metadata(org, repo, int(number), RunId(str(w.id)))
+        acc = await list_artifacts_urls_to_download(wrs, head.sha, number)
+        print("artefacts to download:", acc)
 
         yield ServerSentEvent(
             json.dumps({"info": f"Requesting list of artifact from GH..."})
@@ -345,10 +377,13 @@ async def api_pull(org, repo, number):
                     print("CACHE HIT")
                     content = CACHE[archive]
                 else:
+                    print("Sending SSE")
                     yield ServerSentEvent(
                         json.dumps({"info": f"Downloading artifacts {i+1}/{la}..."})
                     ).encode()
+                    print("Downloading artifact...")
                     zp = await client.get(archive, headers=AUTH.header)
+                    print("Downloaded...")
                     yield ServerSentEvent(
                         json.dumps({"info": f"Got artifacts {i+1}/{la}..."})
                     ).encode()
@@ -357,7 +392,9 @@ async def api_pull(org, repo, number):
                     content = zp.content
                     print("PUT IN CACHE", archive)
                     CACHE[archive] = content
-                    CACHE.sync()
+                    if SYNC:
+                        CACHE.sync()
+                print("E")
                 yield ServerSentEvent(
                     json.dumps({"info": f"Extracting artifact {i+1}..."})
                 ).encode()
@@ -407,7 +444,6 @@ async def api_pull(org, repo, number):
         # log.warning("sending... %s Mb", len(rz) / 1024 / 1024)
         # return rz
 
-    print("make response")
     response = await make_response(
         gen_api_pull(org, repo, number),
         {
@@ -416,15 +452,14 @@ async def api_pull(org, repo, number):
             "Transfer-Encoding": "chunked",
         },
     )
-    response.timeout = None
     return response
 
 
-if __name__ == "__main__":
+def main():
     port = int(os.environ.get("PORT", 1234))
     print("Seen config port ", port)
     prod = os.environ.get("PROD", None)
-    print("Prod= ", prod)
+    print("Prod=", prod)
     try:
         if prod or True:
             app.run(port=port, host="0.0.0.0")
@@ -433,4 +468,8 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("CLOSING CACHE")
         CACHE.close()
-        raise
+    raise
+
+
+if __name__ == "__main__":
+    main()
