@@ -564,8 +564,67 @@ function init(err, _res) {
   });
 }
 
+    function start(){
+      console.log('start')
+
+      const url = new URL(window.location);
+      const pathname = url.pathname;
+      const parts = pathname.split('/');
+      if (parts.length != 6) {
+        console.error('Invalid URL, got only', parts.length, 'parts', parts);
+        return;
+      }
+      console.log('pathname', pathname);
+      // add various checksum that we have indeed 6 parameters, 
+      // and that n, gh, pull are literal strings '', 'gh', 'pull'
+      // and that number is a number.
+      const [n, gh, org, repo, pull, number] = parts;
+      if (n != '' || gh != 'gh' || pull != 'pull') {
+        console.error('Invalid URL' , parts);
+        return;
+      }
+
+
+
+
+      function handle_test_data(dx){
+          window.DX = [];
+          for (const property in dx) {
+              console.log(`${property}: ${dx[property]}`);
+              window.DX = window.DX.concat(process_reply(dx[property], property));
+          }
+          console.info(window.dx);
+          window.init();
+      }
+
+      const eventSource = new EventSource('/api'+url.pathname);
+      console.log('ade eventSource');
+      eventSource.addEventListener('message',function(event) {
+        console.log('message');
+        const data = JSON.parse(event.data);
+        if (data.close) {
+          console.log('closing connection');
+          eventSource.close();
+        };
+        if (data.info) {
+          document.getElementById('info').innerText = data.info;
+        } 
+        if (data.test_data) {
+          console.log('data', data);
+          setTimeout(function(){handle_test_data(data.test_data)}, 0);
+        }
+      });
+
+      eventSource.addEventListener('close',function(event) {
+        console.log('closed connection');
+        eventSource.close();
+
+      });
+    }
+
 window.onresize = init;
 window.init = init;
+window.start = start;
 window.process_report = process_report;
 window.process_reply = process_reply;
 document.getElementById('sZ').addEventListener('change', init);
@@ -573,3 +632,5 @@ document.getElementById('sA').addEventListener('change', init);
 document.getElementById('sB').addEventListener('change', init);
 document.getElementById('sC').addEventListener('change', init);
 document.getElementById('sD').addEventListener('change', init);
+
+start()

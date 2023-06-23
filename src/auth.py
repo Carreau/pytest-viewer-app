@@ -27,7 +27,6 @@ class Auth:
         if self._expires < now:
             print("Expired header, regenerate, (expires, now)", self._expires, now)
             self._regen()
-        print(f"tk: token {self._idata['token']}")
         return {
             "Authorization": f"token {self._idata['token']}",
             "Accept": "application/vnd.github.v3+json",

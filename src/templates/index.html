@@ -210,9 +210,6 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
     </div flex-items> 
     <div class="flex-items">
       <div id='infowrap'>
-      {% if org %}
-        <a href='https://github.com/{{org}}/{{repo}}/pull/{{number}}'>{{org}}/{{repo}}#{{number}}</a>
-      {% endif %}
       </div>
     </div>
     </div>
@@ -247,69 +244,5 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
     <script src="//code.jquery.com/jquery-1.7.2.min.js"></script>
     <script src="//d3js.org/d3.v3.min.js"></script>
     <script src="/index.js"></script>
-    <script>
-
-    function start(){
-      console.log('start')
-
-      const url = new URL(window.location);
-      const pathname = url.pathname;
-      const parts = pathname.split('/');
-      if (parts.length != 6) {
-        console.error('Invalid URL, got only', parts.length, 'parts', parts);
-        return;
-      }
-      console.log('pathname', pathname);
-      // add various checksum that we have indeed 6 parameters, 
-      // and that n, gh, pull are literal strings '', 'gh', 'pull'
-      // and that number is a number.
-      const [n, gh, org, repo, pull, number] = parts;
-      if (n != '' || gh != 'gh' || pull != 'pull') {
-        console.error('Invalid URL' , parts);
-        return;
-      }
-
-
-
-
-      function handle_test_data(dx){
-          window.DX = [];
-          for (const property in dx) {
-              console.log(`${property}: ${dx[property]}`);
-              window.DX = window.DX.concat(process_reply(dx[property], property));
-          }
-          console.info(window.dx);
-          window.init();
-      }
-
-      const eventSource = new EventSource('/api'+url.pathname);
-      console.log('ade eventSource');
-      eventSource.addEventListener('message',function(event) {
-        console.log('message');
-        const data = JSON.parse(event.data);
-        if (data.close) {
-          console.log('closing connection');
-          eventSource.close();
-        };
-        if (data.info) {
-          document.getElementById('info').innerText = data.info;
-        } 
-        if (data.test_data) {
-          console.log('data', data);
-          setTimeout(function(){handle_test_data(data.test_data)}, 0);
-        }
-      });
-
-      eventSource.addEventListener('close',function(event) {
-        console.log('closed connection');
-        eventSource.close();
-
-      });
-    }
-    start();
-
-                            
-
-    </script>
   </body>
 </html>

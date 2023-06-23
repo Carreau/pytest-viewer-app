@@ -165,7 +165,8 @@ async def pull(org, repo, number):
     assert org.isalnum()
     assert repo.isalnum()
     assert number.isnumeric()
-    return await render_template("index.html", org=org, repo=repo, number=number)
+    path = os.path.dirname(os.path.realpath(__file__))
+    return await send_file(os.path.join(path, "templates", "index.html"))
 
 
 @app.route("/index.js")
