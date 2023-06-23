@@ -2,7 +2,6 @@ import json
 import logging
 import os
 import shelve
-import sys
 import time
 from base64 import b64decode
 from dataclasses import dataclass
@@ -22,9 +21,12 @@ from dateutil.parser import isoparse
 from dotenv import load_dotenv
 from psycopg2.errors import UniqueViolation
 from quart import Response, make_response, render_template, send_file
+from dataclasses import dataclass
 
-from auth import Auth
-from postgres import db_get_cursor
+from quart_trio import QuartTrio
+
+
+from .auth import Auth
 
 from .github_types import CommitSha, PullRequest, RunId, WorkflowRun
 from .postgres import db_get_cursor
@@ -33,10 +35,6 @@ load_dotenv()
 
 session = requests_cache.CachedSession("../erase_cache")
 
-
-from dataclasses import dataclass
-
-from quart_trio import QuartTrio
 
 
 @dataclass
