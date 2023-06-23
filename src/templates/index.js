@@ -18,7 +18,6 @@ function process_report(raw, filename) {
 
   let data = [];
 
-
   for (let test of raw.tests) {
     const [file, ...rest] = test.nodeid.split('::');
     const group = rest.join('::');
@@ -42,39 +41,34 @@ function process_report(raw, filename) {
   return data;
 }
 
-
-function process_reply(raw, name) {
+function process_reply(raw, filename) {
   // similar to process_report, but the API may do some more treatment
-  // to make the json report smaller. 
+  // to make the json report smaller.
   console.log('PROCESS REPLY');
 
   let data = [];
-  for (let i in raw.comp){
-    const [nodeid, call, setup, teardown] = raw.comp[i];
+  for (let it of raw.comp) {
+    const [nodeid, call, setup, teardown] = it;
     const [file, ...rest] = nodeid.split('::');
     const group = rest.join('::');
-    const re = { call:call,
-           setup: setup,
-           teardown: teardown
-    };
+    const re = { call: call, setup: setup, teardown: teardown };
     for (let k of ['call', 'setup', 'teardown']) {
       let item = {};
       item.key = file;
       item.group = group;
       item.kind = k;
-      item.value = re[k]*1000;
-      item.duration = re[k]*1000;
+      item.value = re[k] * 1000;
+      item.duration = re[k] * 1000;
       item.outcome = 'passed';
-      item.name = name;
+      item.name = filename;
       data.push(item);
     }
-
   }
 
   // print length of raw comp only if raw.comp is defined
   // (it's not the case for old reports)
-  if (raw.comp !== undefined){
-    console.log('Treated ', raw.comp.length , 'items');
+  if (raw.comp !== undefined) {
+    console.log('Treated ', raw.comp.length, 'items');
   } else {
     console.log('rawcomp empty', raw.comp);
   }
@@ -82,49 +76,48 @@ function process_reply(raw, name) {
   return data;
 }
 
+//function dropHandler(ev) {
+//  // we let user drop file,
+//  // and will process them.
+//
+//  // Prevent default behavior (Prevent file from being opened)
+//  ev.preventDefault();
+//
+//  // right now we'll use the global window.DX declaration.
+//  window.DX = [];
+//
+//  if (ev.dataTransfer.items) {
+//    // Use DataTransferItemList interface to access the file(s)
+//    let processingCount = ev.dataTransfer.items.length;
+//    let processed = 0;
+//    for (let i = 0; i < ev.dataTransfer.items.length; i++) {
+//      // If dropped items aren't files, reject them
+//      if (ev.dataTransfer.items[i].kind === 'file') {
+//        let file = ev.dataTransfer.items[i].getAsFile();
+//        const filename = file.name;
+//        const fr = new FileReader();
+//        fr.onloadend = function () {
+//          const raw = JSON.parse(this.result);
+//
+//          window.DX = window.DX.concat(process_report(raw, filename));
+//          processed = processed + 1;
+//          if (processed === processingCount) {
+//            init();
+//          }
+//        };
+//
+//        fr.readAsText(file);
+//      }
+//    }
+//  } else {
+//    // Use DataTransfer interface to access the file(s)
+//  }
+//}
 
-function dropHandler(ev) {
-  // we let user drop file,
-  // and will process them.
-
-  // Prevent default behavior (Prevent file from being opened)
-  ev.preventDefault();
-
-  // right now we'll use the global window.DX declaration.
-  window.DX = [];
-
-  if (ev.dataTransfer.items) {
-    // Use DataTransferItemList interface to access the file(s)
-    let processingCount = ev.dataTransfer.items.length;
-    let processed = 0;
-    for (let i = 0; i < ev.dataTransfer.items.length; i++) {
-      // If dropped items aren't files, reject them
-      if (ev.dataTransfer.items[i].kind === 'file') {
-        let file = ev.dataTransfer.items[i].getAsFile();
-        const filename = file.name;
-        const fr = new FileReader();
-        fr.onloadend = function () {
-          const raw = JSON.parse(this.result);
-
-          window.DX = window.DX.concat(process_report(raw, filename));
-          processed = processed + 1;
-          if (processed === processingCount) {
-            init();
-          }
-        };
-
-        fr.readAsText(file);
-      }
-    }
-  } else {
-    // Use DataTransfer interface to access the file(s)
-  }
-}
-
-function dragOverHandler(ev) {
-  // Prevent default behavior (Prevent file from being opened)
-  ev.preventDefault();
-}
+//function dragOverHandler(ev) {
+//  // Prevent default behavior (Prevent file from being opened)
+//  ev.preventDefault();
+//}
 
 window.addEventListener('message', function (e) {
   let opts = e.data.opts;
@@ -138,30 +131,29 @@ let defaults = {
     top: 24,
     right: 10,
     bottom: 0,
-    left: 10
+    left: 10,
   },
   rootname: 'TOP',
   format: '.3r',
-  title: ''
+  title: '',
 };
 
 function name(d) {
-  return d.parent ?
-    name(d.parent) +
-          ' / ' +
-          d.key +
-          ' (' +
-          timeformat(d.value) +
-          ' - ' +
-          d3.format('.3r')(d.prct * 100) +
-          '%)' :
-    d.key + ' (' + timeformat(d.value) + ')';
+  return d.parent
+    ? name(d.parent) +
+        ' / ' +
+        d.key +
+        ' (' +
+        timeformat(d.value) +
+        ' - ' +
+        d3.format('.3r')(d.prct * 100) +
+        '%)'
+    : d.key + ' (' + timeformat(d.value) + ')';
 }
 
 function main(opts, data) {
   let root;
   var opts = $.extend(true, {}, defaults, opts);
-  let formatNumber = d3.format(opts.format);
   let rname = opts.rootname;
   let margin = opts.margin;
   let theight = 1;
@@ -181,7 +173,7 @@ function main(opts, data) {
 
   let treemap = d3.layout
     .treemap()
-  //.tile(d3[document.getElementById("layout").value])
+    //.tile(d3[document.getElementById("layout").value])
     .children(function (d, depth) {
       return depth ? null : d._children;
     })
@@ -221,13 +213,13 @@ function main(opts, data) {
     .attr('dy', '.75em');
 
   if (opts.title) {
-    $('#chart').prepend('<p class=\'title\'>' + opts.title + '</p>');
+    $('#chart').prepend("<p class='title'>" + opts.title + '</p>');
   }
   if (data instanceof Array) {
     console.info('INIT', data);
     root = {
       key: rname,
-      _compute: data
+      _compute: data,
     };
   } else {
     root = data;
@@ -240,11 +232,12 @@ function main(opts, data) {
 
   if (window.parent !== window) {
     let myheight =
-            document.documentElement.scrollHeight || document.body.scrollHeight;
-    window.parent.postMessage({
-      height: myheight
-    },
-    '*'
+      document.documentElement.scrollHeight || document.body.scrollHeight;
+    window.parent.postMessage(
+      {
+        height: myheight,
+      },
+      '*'
     );
   }
 
@@ -263,28 +256,19 @@ function main(opts, data) {
   function flatten(d) {
     // not an array
     if (d.value >= 0) {
-      return [
-        [d.value],
-        [d.outcome]
-      ];
+      return [[d.value], [d.outcome]];
     }
-    let acc = d.values ?
-      d.values.reduce(
-        function (previous, current, index, array) {
-          const _t = flatten(current);
-          const duration = _t[0];
-          const outcome = _t[1];
-          return [previous[0].concat(duration), previous[1].concat(outcome)];
-        },
-        [
-          [],
-          []
-        ]
-      ) :
-      [
-        [0],
-        ['passed']
-      ];
+    let acc = d.values
+      ? d.values.reduce(
+          function (previous, current, index, array) {
+            const tx = flatten(current);
+            const duration = tx[0];
+            const outcome = tx[1];
+            return [previous[0].concat(duration), previous[1].concat(outcome)];
+          },
+          [[], []]
+        )
+      : [[0], ['passed']];
     let total = acc[0].reduce((a, b) => a + b);
     d.value = total;
     d.duration = total;
@@ -314,7 +298,7 @@ function main(opts, data) {
   function layout(d) {
     if (d._children) {
       treemap.nodes({
-        _children: d._children
+        _children: d._children,
       });
       d._children.forEach(function (c) {
         c.x = d.x + c.x * d.dx;
@@ -328,10 +312,14 @@ function main(opts, data) {
   }
 
   function display(d) {
-    const sum = d.values.reduce(function(acc, current ){return acc + current.duration;}, 0) / 10;
-    const colorscale = d3.scale.linear()
-      .domain([0,sum])
-      .range(["#10b5e3","#43bf37"]);
+    const sum =
+      d.values.reduce(function (acc, current) {
+        return acc + current.duration;
+      }, 0) / 10;
+    const colorscale = d3.scale
+      .linear()
+      .domain([0, sum])
+      .range(['#10b5e3', '#43bf37']);
 
     grandparent
       .datum(d.parent)
@@ -365,28 +353,28 @@ function main(opts, data) {
       .text(function (d) {
         return (
           d.parent.key +
-                    '\n' +
-                    //'Group:'+d.goup+'\n'+
-                    //'Kind:'+d.kind+'\n'+
-                    //'Name:'+d.name+"\n"+
-                    '(' +
-                    timeformat(d.parent.duration) +
-                    ' - ' +
-                    d3.format('.3r')(d.parent.prct * 100) +
-                    '%' +
-                    ')' +
-                    '\n--\n' +
-                    d.key +
-                    '\n' +
-                    //'Group:'+d.goup+'\n'+
-                    //'Kind:'+d.kind+'\n'+
-                    //'Name:'+d.name+"\n"+
-                    '(' +
-                    timeformat(d.duration) +
-                    ' - ' +
-                    d3.format('.3r')(d.prct * 100) +
-                    '%' +
-                    ')'
+          '\n' +
+          //'Group:'+d.goup+'\n'+
+          //'Kind:'+d.kind+'\n'+
+          //'Name:'+d.name+"\n"+
+          '(' +
+          timeformat(d.parent.duration) +
+          ' - ' +
+          d3.format('.3r')(d.parent.prct * 100) +
+          '%' +
+          ')' +
+          '\n--\n' +
+          d.key +
+          '\n' +
+          //'Group:'+d.goup+'\n'+
+          //'Kind:'+d.kind+'\n'+
+          //'Name:'+d.name+"\n"+
+          '(' +
+          timeformat(d.duration) +
+          ' - ' +
+          d3.format('.3r')(d.prct * 100) +
+          '%' +
+          ')'
         );
       });
     children
@@ -416,11 +404,11 @@ function main(opts, data) {
     g.selectAll('rect').style('fill', function (d) {
       //return "#e53935";
       return colorscale(d.duration);
-      return d.outcome === 'passed' ?
-        '#00cc00' :
-        d.outcome === 'failed' ?
-          '#cc0000' :
-          '#FFA500';
+      return d.outcome === 'passed'
+        ? '#00cc00'
+        : d.outcome === 'failed'
+        ? '#cc0000'
+        : '#FFA500';
       return color(1);
     });
 
@@ -467,11 +455,11 @@ function main(opts, data) {
     return g;
   }
 
-  function text(text) {
-    text.selectAll('tspan').attr('x', function (d) {
+  function text(thetext) {
+    thetext.selectAll('tspan').attr('x', function (d) {
       return x(d.x) + 6;
     });
-    text
+    thetext
       .attr('x', function (d) {
         return x(d.x) + 6;
       })
@@ -483,8 +471,8 @@ function main(opts, data) {
       });
   }
 
-  function text2(text) {
-    text
+  function text2(thetext) {
+    thetext
       .attr('x', function (d) {
         return x(d.x + d.dx) - this.getComputedTextLength() - 6;
       })
@@ -511,7 +499,6 @@ function main(opts, data) {
         return y(d.y + d.dy) - y(d.y);
       });
   }
-
 }
 
 function init(err, _res) {
@@ -547,80 +534,83 @@ function init(err, _res) {
       }
       return previous === current.outcome ? previous : 'mixed';
     }, v[0].outcome);
-    return [{
-      key: '',
-      outcome: red,
-      duration: res2,
-      value: res2+1 // Todo maybe use a scaling factor here ?  
-    } ];
+    return [
+      {
+        key: '',
+        outcome: red,
+        duration: res2,
+        value: res2 + 1, // Todo maybe use a scaling factor here ?
+      },
+    ];
   });
   let data = n.entries(res);
 
-  main({
-    //title: "Pytest Time breakdown"
-  }, {
-    key: 'Total',
-    values: data
-  });
+  main(
+    {
+      //title: "Pytest Time breakdown"
+    },
+    {
+      key: 'Total',
+      values: data,
+    }
+  );
 }
 
-    function start(){
-      console.log('start')
+function start() {
+  console.log('start');
 
-      const url = new URL(window.location);
-      const pathname = url.pathname;
-      const parts = pathname.split('/');
-      if (parts.length != 6) {
-        console.error('Invalid URL, got only', parts.length, 'parts', parts);
-        return;
-      }
-      console.log('pathname', pathname);
-      // add various checksum that we have indeed 6 parameters, 
-      // and that n, gh, pull are literal strings '', 'gh', 'pull'
-      // and that number is a number.
-      const [n, gh, org, repo, pull, number] = parts;
-      if (n != '' || gh != 'gh' || pull != 'pull') {
-        console.error('Invalid URL' , parts);
-        return;
-      }
+  const url = new URL(window.location);
+  const pathname = url.pathname;
+  const parts = pathname.split('/');
+  if (parts.length !== 6) {
+    console.error('Invalid URL, got only', parts.length, 'parts', parts);
+    return;
+  }
+  console.log('pathname', pathname);
+  // add various checksum that we have indeed 6 parameters,
+  // and that n, gh, pull are literal strings '', 'gh', 'pull'
+  // and that number is a number.
+  const [n, gh, org, repo, pull, number] = parts;
+  if (n !== '' || gh !== 'gh' || pull !== 'pull') {
+    console.error('Invalid URL', parts);
+    return;
+  }
 
-
-
-
-      function handle_test_data(dx){
-          window.DX = [];
-          for (const property in dx) {
-              console.log(`${property}: ${dx[property]}`);
-              window.DX = window.DX.concat(process_reply(dx[property], property));
-          }
-          console.info(window.dx);
-          window.init();
-      }
-
-      const eventSource = new EventSource('/api'+url.pathname);
-      console.log('ade eventSource');
-      eventSource.addEventListener('message',function(event) {
-        console.log('message');
-        const data = JSON.parse(event.data);
-        if (data.close) {
-          console.log('closing connection');
-          eventSource.close();
-        };
-        if (data.info) {
-          document.getElementById('info').innerText = data.info;
-        } 
-        if (data.test_data) {
-          console.log('data', data);
-          setTimeout(function(){handle_test_data(data.test_data)}, 0);
-        }
-      });
-
-      eventSource.addEventListener('close',function(event) {
-        console.log('closed connection');
-        eventSource.close();
-
-      });
+  function handle_test_data(dx) {
+    window.DX = [];
+    for (const property in dx) {
+      console.log(`${property}: ${dx[property]}`);
+      window.DX = window.DX.concat(process_reply(dx[property], property));
     }
+    console.info(window.dx);
+    window.init();
+  }
+
+  const eventSource = new EventSource('/api' + url.pathname);
+  console.log('ade eventSource');
+  eventSource.addEventListener('message', function (event) {
+    console.log('message');
+    const data = JSON.parse(event.data);
+    if (data.close) {
+      console.log('closing connection');
+      eventSource.close();
+    }
+    if (data.info) {
+      document.getElementById('info').innerText = data.info;
+    }
+    if (data.test_data) {
+      console.log('data', data);
+      setTimeout(function () {
+        handle_test_data(data.test_data);
+      }, 0);
+    }
+  });
+
+  eventSource.addEventListener('close', function (event) {
+    console.log('closed connection');
+    eventSource.close();
+  });
+}
 
 window.onresize = init;
 window.init = init;
@@ -633,4 +623,4 @@ document.getElementById('sB').addEventListener('change', init);
 document.getElementById('sC').addEventListener('change', init);
 document.getElementById('sD').addEventListener('change', init);
 
-start()
+start();
