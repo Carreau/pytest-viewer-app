@@ -16,7 +16,6 @@ from zipfile import ZipFile
 
 import httpx
 import jwt
-import pytz
 import requests
 import requests_cache
 from dateutil.parser import isoparse
@@ -24,12 +23,11 @@ from dotenv import load_dotenv
 from psycopg2.errors import UniqueViolation
 from quart import Response, make_response, render_template, send_file
 
+from auth import Auth
+from postgres import db_get_cursor
+
+from .github_types import CommitSha, PullRequest, RunId, WorkflowRun
 from .postgres import db_get_cursor
-
-
-
-from .github_types import WorkflowRun, CommitSha, RunId, PullRequest
-
 
 load_dotenv()
 
@@ -102,41 +100,6 @@ access_token_url = (
 )
 
 
-class Auth:
-    def __init__(self, access_token_url, bt):
-        self._access_token_url = access_token_url
-        self._bt = bt
-        self._idata = None
-        self._regen()
-
-    def _regen(self):
-        headers = {
-            "Authorization": f"Bearer {self._bt()}",
-            "Accept": "application/vnd.github.v3+json",
-        }
-        response = requests.post(self._access_token_url, data=b"", headers=headers)
-        # the remaining number of requests you can make with the token is
-        # returned in the X-RateLimit-Remaining header.
-
-        log.debug("response headers %s", response.headers)
-        self._idata = response.json()
-        log.info("new expires_at idata: %r", self._idata["expires_at"])
-        self._expires = isoparse(self._idata["expires_at"]) - timedelta(seconds=10)
-
-    @property
-    def header(self):
-        now = datetime.now(pytz.UTC)
-        if self._expires < now:
-            log.info(
-                "Expired header, regenerate, (expires, now) %s %", self._expires, now
-            )
-            self._regen()
-        return {
-            "Authorization": f"token {self._idata['token']}",
-            "Accept": "application/vnd.github.v3+json",
-        }
-
-
 AUTH = Auth(access_token_url, bt)
 
 
@@ -183,6 +146,18 @@ async def collect_artifact_metadata(org: str, repo: str, pull_number: int, run_i
             return "ok"
         except UniqueViolation:
             return "duplicate"
+
+
+@app.route("/action_run")
+async def list_action_runs():
+    with db_get_cursor() as cursor:
+        cursor.execute(
+            """
+            SELECT organization, repo, pull_number, run_id FROM action_run
+        """,
+            (),
+        )
+        return cursor.fetchall()
 
 
 @app.route("/gh/<org>/<repo>/pull/<number>")

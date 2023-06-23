@@ -8,7 +8,7 @@ log = logging.getLogger("postgres")
 @contextmanager
 def db_get_cursor():
     conn = psycopg2.connect(
-        host="localhost",
+        host=environ["POSTGRES_HOST"],
         user=environ["POSTGRES_USER"],
         password=environ["POSTGRES_PASSWORD"],
         dbname=environ["POSTGRES_DB"],
