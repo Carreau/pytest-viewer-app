@@ -1,6 +1,6 @@
+import gc
 import json
 import logging
-from random import choice, randint
 import os
 import shelve
 import time
@@ -11,6 +11,7 @@ from hashlib import sha512
 from io import BytesIO
 from os import environ, environb
 from pathlib import Path
+from random import choice, randint
 from typing import List, NewType
 from zipfile import ZipFile
 
@@ -22,13 +23,9 @@ from dateutil.parser import isoparse
 from dotenv import load_dotenv
 from psycopg2.errors import UniqueViolation
 from quart import Response, make_response, render_template, send_file
-from dataclasses import dataclass
-
 from quart_trio import QuartTrio
 
-
 from .auth import Auth
-
 from .github_types import CommitSha, PullRequest, RunId, WorkflowRun
 from .postgres import db_get_cursor
 
@@ -283,11 +280,11 @@ async def list_artifacts_urls_to_download(
     acc = []
     async with httpx.AsyncClient(follow_redirects=True) as client:
         for i, d in enumerate(data):
-            print("analysing workflow run", d.id)
-            print("    head_sha", d.head_sha)
-            print("    id:", d.id)
-            print("    artifact_url", d.artifacts_url)
-            print("    artifact contains id:", str(d.id) in d.artifacts_url)
+            log.debug("analysing workflow run", d.id)
+            log.debug("    head_sha", d.head_sha)
+            log.debug("    id:", d.id)
+            log.debug("    artifact_url", d.artifacts_url)
+            log.debug("    artifact contains id:", str(d.id) in d.artifacts_url)
             if d.head_sha != head_sha:
                 log.warning("Skipping workflow %s, head sha does not match", d.id)
                 continue
@@ -296,8 +293,10 @@ async def list_artifacts_urls_to_download(
                 headers=AUTH.header,
             )
             data2 = response.json()
-            print("x-ratelimit-remaining:", response.headers["X-RateLimit-Remaining"])
-            log.warning(
+            log.info(
+                "x-ratelimit-remaining:", response.headers["X-RateLimit-Remaining"]
+            )
+            log.debug(
                 "Found Artifacts %s on page %s (pr %s)",
                 str(len(data2["artifacts"])),
                 str(i),
@@ -322,11 +321,11 @@ async def list_artifacts_urls_to_download(
 
 pkl = Path("./.cache.pkl.db")
 if pkl.exists():
-    print("USING SHELVE")
+    log.warning("USING SHELVE")
     CACHE = shelve.open(".cache.pkl")  # type: ignore
     SYNC = True
 else:
-    print("NOT USING SHELVE", pkl, "does not extis")
+    log.debug("NOT USING SHELVE", pkl, "does not extis")
     CACHE = {}  # type: ignore
     SYNC = False
 
@@ -367,12 +366,12 @@ async def api_pull(org: str, repo: str, number: str):
         yield ServerSentEvent(
             json.dumps({"info": "Looking for GH artifacts..."})
         ).encode()
-        print("Workflow runs id:", [(w.id, w.head_sha) for w in wrs])
+        log.debug("Workflow runs id: %r", [(w.id, w.head_sha) for w in wrs])
 
         for w in wrs:
             await collect_artifact_metadata(org, repo, int(number), RunId(str(w.id)))
         acc = await list_artifacts_urls_to_download(wrs, head.sha, number)
-        print("artefacts to download:", acc)
+        log.debug("artefacts to download: %s", acc)
 
         yield ServerSentEvent(
             json.dumps({"info": f"Requesting list of artifact from GH..."})
@@ -383,43 +382,37 @@ async def api_pull(org: str, repo: str, number: str):
             la = len(acc)
             for i, archive in enumerate(acc):
                 log.warning(f"Requesting Content... %s ({number})", i)
-                print("archive", archive)
+                log.debug("archive %s", archive)
                 if archive in CACHE:
-                    print("CACHE HIT")
+                    log.debug("CACHE HIT")
                     content = CACHE[archive]
                 else:
-                    print("Sending SSE")
+                    log.debug("Sending SSE")
                     yield ServerSentEvent(
                         json.dumps({"info": f"Downloading artifacts {i+1}/{la}..."})
                     ).encode()
-                    print("Downloading artifact...")
+                    log.info("Downloading artifact...")
                     zp = await client.get(archive, headers=AUTH.header)
-                    print("Downloaded...")
+                    log.debug("Downloaded...")
                     yield ServerSentEvent(
                         json.dumps({"info": f"Got artifacts {i+1}/{la}..."})
                     ).encode()
                     log.warning(f"Unzipping in memory... %s ({number})", i)
                     zp.raise_for_status()
                     content = zp.content
-                    print("PUT IN CACHE", archive)
+                    log.debug("PUT IN CACHE %s", archive)
                     CACHE[archive] = content
                     if SYNC:
                         CACHE.sync()
-                print("E")
                 yield ServerSentEvent(
                     json.dumps({"info": f"Extracting artifact {i+1}..."})
                 ).encode()
-                print("F")
                 z = ZipFile(BytesIO(content))
-                print("G")
                 lll = len(z.filelist)
-                print("H")
                 for j, fx in enumerate(z.filelist):
-                    print("I", j)
                     yield ServerSentEvent(
                         json.dumps({"info": f"Processing file {i+1}-{j+1}/{lll}..."})
                     ).encode()
-                    import gc
 
                     gc.collect()
 
@@ -443,18 +436,14 @@ async def api_pull(org: str, repo: str, number: str):
                                 )
                             )
                         else:
-                            print(item)
+                            log.warning("unhandled item %r", item)
 
                     del xs
                     ## keep only what's necessary
                     data[fx.filename] = {"comp": comp_test}
-                print("J")
-        print("K")
 
-        yield ServerSentEvent(json.dumps({"info": f"Data ready, sending..."})).encode()
-        print("L")
+        yield ServerSentEvent(json.dumps({"info": "Data ready, sending..."})).encode()
         yield ServerSentEvent(json.dumps({"test_data": data, "info": "done"})).encode()
-        print("M")
         yield ServerSentEvent(
             json.dumps({"close": True, "info": "closing connection"})
         ).encode()
@@ -463,7 +452,7 @@ async def api_pull(org: str, repo: str, number: str):
         # log.warning("sending... %s Mb", len(rz) / 1024 / 1024)
         # return rz
 
-    response = await make_response(
+    resp = await make_response(
         gen_api_pull(org, repo, number),
         {
             "Content-Type": "text/event-stream",
@@ -471,23 +460,23 @@ async def api_pull(org: str, repo: str, number: str):
             "Transfer-Encoding": "chunked",
         },
     )
-    return response
+    return resp
 
 
 def main():
     port = int(os.environ.get("PORT", 1357))
-    print("Seen config port ", port)
+    log.info("Seen config port %s", port)
     prod = os.environ.get("PROD", None)
-    print("Prod=", prod)
+    log.info("Prod= %s", prod)
     try:
         if prod or True:
             app.run(port=port, host="0.0.0.0")
         else:
             app.run(port=port)
     except KeyboardInterrupt:
-        print("CLOSING CACHE")
+        log.info("CLOSING CACHE")
         CACHE.close()
-    raise
+        raise
 
 
 if __name__ == "__main__":
