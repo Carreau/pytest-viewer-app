@@ -599,14 +599,12 @@ function start() {
       console.log('Update info');
       document.getElementById('info').innerText = data.info;
     }
-    // print all keys in data
-    console.log('Data keys:');
-    for (let property in data) {
-      console.log('   data.' + property + ' = ...');
-    }
 
     if (data.test_data) {
       console.log('got test data!!', data);
+      const elem = document.getElementById('info');
+      elem.parentNode.removeChild(elem);
+
       setTimeout(function () {
         handle_test_data(data.test_data);
       }, 0);

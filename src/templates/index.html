@@ -235,6 +235,18 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
         You can generate report with
         <code>pytest --json-report --json-report-file=report.json</code>
       </p>
+      <p>
+      Dropdown at the top of the page allow you to select the decomposition of the tree view, and in which order the
+      test times should be displayed/agregated. The default is to display the test times by test file, then by test
+      path, test, parametrisation, and finally setup/call/teardown.
+      </p>
+      <p>
+      If a decomposition is removed <code>-</code> it means that the test times will be aggregated (summed for now)
+      across this dimension. So for example if you wish the total time a given test took across all OS/Python version,
+      you can change "Report File" to <code>-</code>.</br>
+
+      The size of the square are proportional to the time it took to run the item (agreggation included). The color of the square is from slowest (greenish) to fastest (blueish).
+      </p>
     </content>
 
     <footer>
