@@ -587,16 +587,19 @@ function start() {
   }
 
   const eventSource = new EventSource('/api' + url.pathname);
-  console.log('ade eventSource');
+  console.log('add eventSource');
   eventSource.addEventListener('message', function (event) {
-    console.log('message');
+    console.log('message', event);
     const data = JSON.parse(event.data);
     if (data.close) {
       console.log('closing connection');
       eventSource.close();
+      return;
     }
     if (data.info) {
+      console.log('Update info');
       document.getElementById('info').innerText = data.info;
+      return;
     }
     if (data.test_data) {
       console.log('data', data);
