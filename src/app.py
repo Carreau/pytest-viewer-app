@@ -1,5 +1,6 @@
 import json
 import logging
+from random import choice, randint
 import os
 import shelve
 import time
@@ -110,6 +111,16 @@ h2 = {
     "Authorization": f"token {idata['token']}",
     "Accept": "application/vnd.github.v3+json",
 }
+
+
+@app.route("/api/pulls")
+async def pulls():
+    dat_ = {
+        "{}/{}".format(choice(["ipython/ipython", "napari/napari"]), randint(1, 100))
+        for _ in range(10)
+    }
+    data = [{"value": x, "name": x} for x in dat_]
+    return json.dumps(data)
 
 
 @app.route("/gh/<org>/<repo>")
@@ -430,7 +441,7 @@ async def api_pull(org: str, repo: str, number: str):
 
 
 def main():
-    port = int(os.environ.get("PORT", 1234))
+    port = int(os.environ.get("PORT", 1357))
     print("Seen config port ", port)
     prod = os.environ.get("PROD", None)
     print("Prod=", prod)
