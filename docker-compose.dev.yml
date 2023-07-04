@@ -6,7 +6,7 @@ services:
     container_name: "viewer_app_db"
     image: postgres:15.2
     volumes:
-      - ./.postgres-data:/var/lib/postgresql/data
+      - ../.postgres-data:/var/lib/postgresql/data
     restart: always
     env_file:
       - .env
