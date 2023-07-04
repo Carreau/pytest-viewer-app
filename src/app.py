@@ -115,12 +115,37 @@ h2 = {
 
 @app.route("/api/pulls")
 async def pulls():
-    dat_ = {
-        "{}/{}".format(choice(["ipython/ipython", "napari/napari"]), randint(1, 100))
-        for _ in range(10)
-    }
-    data = [{"value": x, "name": x} for x in dat_]
-    return json.dumps(data)
+    with db_get_cursor() as cursor:
+        try:
+            cursor.execute(
+                #  here we want only T UNIQUE organization, repo, pull_number  FROM action_run LIMIT 50 ORDER BY id DESC
+                """
+                SELECT DISTINCT ON (organization, repo, pull_number)
+                    organization, repo, pull_number
+                FROM action_run
+                ORDER BY organization, repo, pull_number DESC
+                LIMIT 50
+            """
+            )
+            results = cursor.fetchall()
+            data = [
+                {
+                    "value": f"{org}/{repo}/{pull_number}",
+                    "name": f"{org}/{repo}/{pull_number}",
+                }
+                for org, repo, pull_number in results
+            ]
+            return json.dumps(data)
+        except Exception as e:
+            log.exception(e)
+            raise
+
+    # dat_ = {
+    #    "{}/{}".format(choice(["ipython/ipython", "napari/napari"]), randint(1, 100))
+    #    for _ in range(10)
+    # }
+    # data = [{"value": x, "name": x} for x in dat_]
+    # return json.dumps(data)
 
 
 @app.route("/gh/<org>/<repo>")
@@ -149,6 +174,7 @@ async def collect_artifact_metadata(org: str, repo: str, pull_number: int, run_i
                 """
                 INSERT INTO action_run (organization, repo, run_id, pull_number)
                 VALUES (%s, %s, %s, %s)
+                ON CONFLICT (organization, repo, run_id, pull_number) DO NOTHING
             """,
                 (org, repo, run_id, pull_number),
             )
