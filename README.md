@@ -1,3 +1,31 @@
+# Pytest-viewer-app
+
+This repository is the code behind http://pytest-viewer.org/, it provide a way
+to aggregate pytest-json-report file across multiple runs of GitHub action for a
+given PRs and analyse/visualise the slowests test. 
+
+You can generate those report and store then as artifact with
+
+
+```
+pytest ... --json-report-file=./report-${{ matrix.python-version }}-${{runner.os}}.json
+...
+- uses: actions/upload-artifact@v3
+  with:
+      name: upload pytest timing reports as json
+      path: |
+        ./report-*.json
+```
+
+Pytest-viewer.org will search for artifact with pytest in the name, download
+them, and visualize them. 
+
+# example
+
+![](example.png)
+
+
+
 # Requirements
 
 - `docker` and `docker-compose`

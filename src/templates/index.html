@@ -78,7 +78,10 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
         padding: 50px;
         display: block;
         background: lightgrey;
-        text-align: center;
+        max-width: 80ex;
+        margin-left: auto;
+        margin-right: auto;
+        text-align: left;
       }
 
       .grandparent text {
@@ -236,21 +239,27 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
         <code>pytest --json-report --json-report-file=report.json</code>
       </p>
       <p>
+    </content>
+    <content>
       Dropdown at the top of the page allow you to select the decomposition of the tree view, and in which order the
       test times should be displayed/agregated. The default is to display the test times by test file, then by test
       path, test, parametrisation, and finally setup/call/teardown.
       </p>
       <p>
-      If a decomposition is removed <code>-</code> it means that the test times will be aggregated (summed for now)
+      If a decomposition is removed (<code>-</code>) it means that the test times will be aggregated (summed for now)
       across this dimension. So for example if you wish the total time a given test took across all OS/Python version,
-      you can change "Report File" to <code>-</code>.</br>
+      you can change "Report File" to <code>-</code>.
+      </p>
+      <p>
 
       The size of the square are proportional to the time it took to run the item (agreggation included). The color of the square is from slowest (greenish) to fastest (blueish).
+
+      Read more on the repository <a href='https://github.com/Carreau/pytest-viewer-app'>Carreau/pytest-viewer-app</a>
       </p>
     </content>
 
     <footer>
-        <p>Author: Matthias Bussonnier, Yann Pelegrini, and contributors. GitHub: <a href='https://github.com/Carreau/pytest-json-report-viewer'>Carreau/pytest-json-report-viewer</a></p>
+        <p>Author: Matthias Bussonnier, Yann Pelegrini, and contributors. GitHub: <a href='https://github.com/Carreau/pytest-viewer-app'>Carreau/pytest-viewer-app</a></p>
     </footer>
 
     <script src="//code.jquery.com/jquery-1.7.2.min.js"></script>
