@@ -383,9 +383,13 @@ async def api_pull(org: str, repo: str, number: str):
                 yield ServerSentEvent(
                     json.dumps({"info": f"Extracting artifact {i+1}..."})
                 ).encode()
+                print("F")
                 z = ZipFile(BytesIO(content))
+                print("G")
                 lll = len(z.filelist)
+                print("H")
                 for j, fx in enumerate(z.filelist):
+                    print("I", j)
                     yield ServerSentEvent(
                         json.dumps({"info": f"Processing file {i+1}-{j+1}/{lll}..."})
                     ).encode()
@@ -418,9 +422,13 @@ async def api_pull(org: str, repo: str, number: str):
                     del xs
                     ## keep only what's necessary
                     data[fx.filename] = {"comp": comp_test}
+                print("J")
+        print("K")
 
         yield ServerSentEvent(json.dumps({"info": f"Data ready, sending..."})).encode()
+        print("L")
         yield ServerSentEvent(json.dumps({"test_data": data, "info": "done"})).encode()
+        print("M")
         yield ServerSentEvent(
             json.dumps({"close": True, "info": "closing connection"})
         ).encode()
