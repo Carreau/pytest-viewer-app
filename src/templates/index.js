@@ -502,6 +502,7 @@ function main(opts, data) {
 }
 
 function init(err, _res) {
+  console.log('init called, either resoze or reply');
   let res = JSON.parse(JSON.stringify(window.DX));
 
   res.map(function (rx) {
@@ -617,7 +618,20 @@ function start() {
   });
 }
 
-window.onresize = init;
+// onresize, call init, debounce every 1s
+//
+let timeoutId;
+
+function debounced_init() {
+  // Clear the previous timeout
+  clearTimeout(timeoutId);
+
+  // Set a new timeout
+  timeoutId = setTimeout(init, 1000); // Adjust the delay as needed (in milliseconds)
+}
+
+window.onresize = debounced_init;
+
 window.init = init;
 window.start = start;
 window.process_report = process_report;
