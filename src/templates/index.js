@@ -44,7 +44,7 @@ function process_report(raw, filename) {
 function process_reply(raw, filename) {
   // similar to process_report, but the API may do some more treatment
   // to make the json report smaller.
-  console.log('PROCESS REPLY');
+  console.log('processing file...', filename);
 
   let data = [];
   for (let it of raw.comp) {
@@ -580,7 +580,7 @@ function start() {
   function handle_test_data(dx) {
     window.DX = [];
     for (const property in dx) {
-      console.log(`${property}: ${dx[property]}`);
+      console.log(`${property}`, dx[property]);
       window.DX = window.DX.concat(process_reply(dx[property], property));
     }
     console.info(window.dx);
@@ -604,7 +604,7 @@ function start() {
     if (data.test_data) {
       console.log('got test data!!', data);
       const elem = document.getElementById('info');
-      elem.parentNode.removeChild(elem);
+      elem.parentNode.parentNode.removeChild(elem.parentNode);
 
       setTimeout(function () {
         handle_test_data(data.test_data);
@@ -623,11 +623,9 @@ function start() {
 let timeoutId;
 
 function debounced_init() {
-  // Clear the previous timeout
   clearTimeout(timeoutId);
 
-  // Set a new timeout
-  timeoutId = setTimeout(init, 1000); // Adjust the delay as needed (in milliseconds)
+  timeoutId = setTimeout(init, 1000);
 }
 
 window.onresize = debounced_init;
