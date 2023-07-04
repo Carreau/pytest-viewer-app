@@ -343,8 +343,8 @@ async def api_pull(org: str, repo: str, number: str):
         ).encode()
         print("Workflow runs id:", [(w.id, w.head_sha) for w in wrs])
 
-        for w in wrs:
-            await collect_artifact_metadata(org, repo, int(number), RunId(str(w.id)))
+        #for w in wrs:
+        #    await collect_artifact_metadata(org, repo, int(number), RunId(str(w.id)))
         acc = await list_artifacts_urls_to_download(wrs, head.sha, number)
         print("artefacts to download:", acc)
 
