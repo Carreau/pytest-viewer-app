@@ -127,7 +127,7 @@ async def pulls():
             results = cursor.fetchall()
             data = [
                 {
-                    "value": f"{org}/{repo}/{pull_number}",
+                    "value": f"/gh/{org}/{repo}/pull/{pull_number}",
                     "name": f"{org}/{repo}/{pull_number}",
                 }
                 for org, repo, pull_number in results
@@ -280,22 +280,20 @@ async def list_artifacts_urls_to_download(
     acc = []
     async with httpx.AsyncClient(follow_redirects=True) as client:
         for i, d in enumerate(data):
-            log.debug("analysing workflow run", d.id)
-            log.debug("    head_sha", d.head_sha)
-            log.debug("    id:", d.id)
-            log.debug("    artifact_url", d.artifacts_url)
-            log.debug("    artifact contains id:", str(d.id) in d.artifacts_url)
+            log.debug("analysing workflow run %s", d.id)
+            log.debug("    head_sha %s", d.head_sha)
+            log.debug("    id: %s", d.id)
+            log.debug("    artifact_url %s", d.artifacts_url)
+            log.debug("    artifact contains id: %s", str(d.id) in d.artifacts_url)
             if d.head_sha != head_sha:
                 log.warning("Skipping workflow %s, head sha does not match", d.id)
                 continue
-            response = await client.get(
+            resp = await client.get(
                 d.artifacts_url,
                 headers=AUTH.header,
             )
-            data2 = response.json()
-            log.info(
-                "x-ratelimit-remaining:", response.headers["X-RateLimit-Remaining"]
-            )
+            data2 = resp.json()
+            log.info("x-ratelimit-remaining: %s", resp.headers["X-RateLimit-Remaining"])
             log.debug(
                 "Found Artifacts %s on page %s (pr %s)",
                 str(len(data2["artifacts"])),

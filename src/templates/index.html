@@ -231,9 +231,7 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
     <content>
       <p id="info">
         Drag pytest json report files and select the you decomposition you like
-        above.
-      </p>
-      <p>
+        above.</br>
         You can generate report with
         <code>pytest --json-report --json-report-file=report.json</code>
       </p>
@@ -248,8 +246,17 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
     <script src="//d3js.org/d3.v3.min.js"></script>
     <script src="/index.js"></script>
     <script>
+      function onSelectChange(value){
+        const new_path = value;
+        // push url in history with the value
+        window.history.pushState({}, '', new_path);
+        // reload the page
+        window.location.reload();
+      }
       (async () => {
         const selectElement = document.getElementById("recent");
+        // bind the onSelectedChange function to the select element when it changes
+        selectElement.addEventListener('change', (e) => onSelectChange(e.target.value));
 
 
         // Create an array of option elements
