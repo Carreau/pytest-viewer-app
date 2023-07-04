@@ -209,8 +209,11 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
      </form>
     </div flex-items> 
     <div class="flex-items">
-      <div id='infowrap'>
-      </div>
+      <form>
+        <select name="recent" id="recent">
+          <option value="" disabled selected>Select recent PR</option>
+        </select>
+      </form>
     </div>
     </div>
     <div id='busy'><div>
@@ -244,5 +247,27 @@ Generic treemap, based on http://bost.ocks.org/mike/treemap/
     <script src="//code.jquery.com/jquery-1.7.2.min.js"></script>
     <script src="//d3js.org/d3.v3.min.js"></script>
     <script src="/index.js"></script>
+    <script>
+      const selectElement = document.getElementById("recent");
+
+
+      // Create an array of option elements
+      const options = await (await fetch('/api/pulls')).json()
+      console.log('options...', options);
+
+      // Create a document fragment to hold the new options
+      const fragment = document.createDocumentFragment();
+
+      // Iterate over the options array and create option elements
+      options.forEach(option => {
+        const newOption = document.createElement("option");
+        newOption.value = option.value;
+        newOption.text = option.name;
+        fragment.appendChild(newOption);
+      });
+
+      // Append the fragment containing all the new options to the select element
+      selectElement.appendChild(fragment);
+    </script>
   </body>
 </html>
